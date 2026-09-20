@@ -1,0 +1,10 @@
+command:
+  - python
+  - app.py
+env:
+  - name: DATABRICKS_WAREHOUSE_ID
+    value: "d0163299fb00cd64"
+  - name: GENIE_SPACE_ID
+    value: "01f1b456af5d124aacf95d5f5d8e3636"
+  - name: DEFAULT_APPROVER
+    value: "chris.chang@databricks.com"
