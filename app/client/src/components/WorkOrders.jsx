@@ -39,7 +39,7 @@ export function PendingApprovals({ rows, onApprove, busyId }) {
               <td className="dim small">{r.created_by}</td>
               <td>
                 <button
-                  className="btn btn-primary"
+                  className="btn btn-success"
                   disabled={busyId === r.order_id}
                   onClick={() => onApprove(r.order_id)}
                 >

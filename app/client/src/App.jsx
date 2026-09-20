@@ -7,6 +7,7 @@ import { PendingApprovals, WorkOrderHistory } from "./components/WorkOrders.jsx"
 import EventsFeed from "./components/EventsFeed.jsx";
 import ProposeModal from "./components/ProposeModal.jsx";
 import Copilot from "./components/Copilot.jsx";
+import MapCard from "./components/MapCard.jsx";
 
 const REFRESH_MS = 60_000;
 
@@ -70,11 +71,8 @@ export default function App() {
     <div className="shell">
       <header className="topbar">
         <div className="brand">
-          <span className="brand-mark">SB</span>
-          <div>
-            <h1>Sunbelt Fleet Copilot</h1>
-            <p className="brand-sub">IoT Fleet Health Command Center</p>
-          </div>
+          <img src="/logo.svg" alt="Sunbelt Rentals" className="brand-logo" />
+          <h1>IoT Fleet Health Center</h1>
         </div>
         <div className="topbar-right">
           <span className={`refresh-note ${ago > 90 ? "stale" : ""}`}>
@@ -87,7 +85,7 @@ export default function App() {
             + Propose Work Order
           </button>
           <button className="btn btn-accent" onClick={() => setCopilotOpen(true)}>
-            ✦ Copilot
+            ✦ Genie
           </button>
         </div>
       </header>
@@ -106,6 +104,8 @@ export default function App() {
             <KpiTile label="Machines Reporting" value={k.machines_reporting ?? "—"} tone="green" sub="live telemetry snapshot" />
             <KpiTile label="7-Day Avg Utilization" value={k.avg_utilization_7d != null ? `${Number(k.avg_utilization_7d).toFixed(1)}%` : "—"} tone="default" sub="all classes" />
           </section>
+
+          <MapCard />
 
           <section className="grid-2-1">
             <UtilizationChart trend={data.utilization_trend} />

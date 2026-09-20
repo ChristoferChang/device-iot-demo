@@ -96,16 +96,18 @@ export default function Copilot({ open, onClose }) {
                 {m.error && <span className="form-error">{m.error}</span>}
                 {m.text && <div className="md">{renderMarkdown(m.text)}</div>}
                 {m.rows && m.rows.length > 0 && (
-                  <table className="table msg-table">
-                    <thead>
-                      <tr>{m.columns.map((c) => <th key={c}>{c}</th>)}</tr>
-                    </thead>
-                    <tbody>
-                      {m.rows.slice(0, 8).map((r, ri) => (
-                        <tr key={ri}>{m.columns.map((c) => <td key={c}>{String(r[c])}</td>)}</tr>
-                      ))}
-                    </tbody>
-                  </table>
+                  <div className="table-wrap">
+                    <table className="table msg-table">
+                      <thead>
+                        <tr>{m.columns.map((c) => <th key={c}>{c}</th>)}</tr>
+                      </thead>
+                      <tbody>
+                        {m.rows.slice(0, 8).map((r, ri) => (
+                          <tr key={ri}>{m.columns.map((c) => <td key={c}>{String(r[c])}</td>)}</tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 )}
                 {m.sql && (
                   <details className="sql-details">

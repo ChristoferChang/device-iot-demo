@@ -49,17 +49,39 @@ class Machine:
     duty_phase: float       # offset of daily activity pattern
 
 
+# Charlotte NC metro + South Carolina yard locations (12 rental yards)
+YARDS = [
+    (35.227, -80.843),  # Charlotte NC
+    (35.409, -80.581),  # Concord NC
+    (35.411, -80.856),  # Huntersville NC
+    (35.262, -81.187),  # Gastonia NC
+    (34.985, -80.549),  # Monroe NC
+    (34.925, -81.025),  # Rock Hill SC
+    (34.000, -81.035),  # Columbia SC
+    (34.853, -82.394),  # Greenville SC
+    (34.950, -81.932),  # Spartanburg SC
+    (32.776, -79.931),  # Charleston SC
+    (33.690, -78.887),  # Myrtle Beach SC
+    (34.198, -79.764),  # Florence SC
+]
+
+
 def build_fleet() -> list[Machine]:
     machines = []
     for equipment_class, (prefix, count) in CLASSES.items():
         for i in range(1, count + 1):
             h = float(int(hashlib.sha256(f"{prefix}-{i:04d}".encode()).hexdigest()[:12], 16))
+            h_int = int(h)
+            yard_lat, yard_lon = YARDS[h_int % len(YARDS)]
+            # Hash-based fixed offset ±0.02 deg so machines cluster tightly around their yard
+            lat_offset = ((h_int >> 6) % 401 - 200) / 10000.0
+            lon_offset = ((h_int >> 15) % 401 - 200) / 10000.0
             machines.append(Machine(
                 equipment_id=f"{prefix}-{i:04d}",
                 equipment_class=equipment_class,
                 seed=(h % 1_000_000) / 1_000_000,
-                lat=33.0 + (h % 900) / 900 * 4.0,          # scatter around AZ/Sunbelt south region
-                lon=-113.5 + (h % 1300) / 1300 * 5.0,
+                lat=yard_lat + lat_offset,
+                lon=yard_lon + lon_offset,
                 tank_size_l=200 + (h % 300),
                 duty_cycle_amp=0.35 + (h % 100) / 100 * 0.5,
                 duty_phase=(h % 628) / 100,

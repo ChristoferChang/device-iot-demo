@@ -85,16 +85,41 @@ def acting_email(request: Request) -> str:
 
 
 def run_sql(w: WorkspaceClient, sql: str, timeout_s: str = "30s") -> list[dict[str, Any]]:
-    resp = w.statement_execution.execute_statement(
-        warehouse_id=WAREHOUSE_ID,
-        statement=sql,
-        wait_timeout=timeout_s,
-        format=Format.JSON_ARRAY,
-    )
+    try:
+        resp = w.statement_execution.execute_statement(
+            warehouse_id=WAREHOUSE_ID,
+            statement=sql,
+            wait_timeout=timeout_s,
+            format=Format.JSON_ARRAY,
+        )
+    except Exception as e:
+        if "PermissionDenied" in type(e).__name__ or "permission to use the SQL Warehouse" in str(e):
+            raise HTTPException(
+                status_code=502,
+                detail=(
+                    "OBO fallback failed: the session token lacks the required scopes. "
+                    "Fix: fully log out of Databricks (and this app) then re-open the app so the "
+                    "consent re-issues tokens with the 'sql' scope — check /api/debug/auth "
+                    f"token_scope. Underlying error: {str(e)[:120]}"
+                ),
+            )
+        raise
     state = str(resp.status.state)
     if state != "StatementState.SUCCEEDED":
         err = resp.status.error.message if resp.status and resp.status.error else state
-        raise HTTPException(status_code=502, detail=f"SQL failed: {err}")
+        detail = f"SQL failed: {err}"
+        if "INSUFFICIENT_PERMISSIONS" in str(err):
+            sp = os.environ.get("DATABRICKS_CLIENT_ID", "<app-sp-id>")
+            detail += (
+                " | Fix — run these GRANTs as catalog owner/admin: "
+                f"GRANT USE CATALOG ON CATALOG sbr_iot_demo TO `{sp}`; "
+                f"GRANT USE SCHEMA ON SCHEMA sbr_iot_demo.fleet TO `{sp}`; "
+                f"GRANT SELECT ON SCHEMA sbr_iot_demo.fleet TO `{sp}`; "
+                f"GRANT MODIFY ON TABLE sbr_iot_demo.fleet.work_orders TO `{sp}`; "
+                f"GRANT EXECUTE ON PROCEDURE sbr_iot_demo.fleet.propose_work_order TO `{sp}`; "
+                f"GRANT EXECUTE ON PROCEDURE sbr_iot_demo.fleet.approve_work_order TO `{sp}`;"
+            )
+        raise HTTPException(status_code=502, detail=detail)
     cols = [c.name for c in resp.manifest.schema.columns]
     rows = (resp.result.data_array if resp.result else None) or []
     return [dict(zip(cols, r)) for r in rows]
@@ -102,6 +127,33 @@ def run_sql(w: WorkspaceClient, sql: str, timeout_s: str = "30s") -> list[dict[s
 
 def q(w: WorkspaceClient, sql: str) -> list[dict[str, Any]]:
     return run_sql(w, sql)
+
+
+def _is_permission_error(detail: str) -> bool:
+    d = str(detail).lower()
+    return ("insufficient_permissions" in d or "permission" in d or "403" in d
+            or "invalid scope" in d)
+
+
+def sql_authed(xfat: Optional[str], sql: str, timeout_s: str = "30s") -> list[dict[str, Any]]:
+    """Run SQL as the app SP first; on a permission error retry with the
+    logged-in user's OBO token (works when the SP lacks UC grants)."""
+    try:
+        return run_sql(sp_client(), sql, timeout_s)
+    except (HTTPException, Exception) as first_err:
+        detail = getattr(first_err, "detail", None) or str(first_err)
+        obo = user_client(xfat)
+        if obo and _is_permission_error(detail):
+            log.warning("SQL via SP failed (%s); retrying with OBO user identity", str(detail)[:120])
+            try:
+                return run_sql(obo, sql, timeout_s)
+            except (HTTPException, Exception) as obo_err:
+                obo_detail = getattr(obo_err, "detail", None) or str(obo_err)
+                raise HTTPException(
+                    status_code=502,
+                    detail=f"SP auth failed: {detail} || OBO fallback also failed: {obo_detail}",
+                )
+        raise
 
 
 def f(v: Any, default=0.0) -> float:
@@ -137,29 +189,39 @@ def health():
 
 @app.get("/api/debug/auth")
 def debug_auth(request: Request):
-    hdrs = {
-        k: (f"<len={len(v)}>" if ("token" in k or "auth" in k) else v)
-        for k, v in request.headers.items()
-        if k.startswith("x-")
-    }
+    import base64
+    import json as _json
+
+    tok = request.headers.get("x-forwarded-access-token") or ""
+    scope = None
+    if tok.count(".") == 2:
+        try:
+            payload = tok.split(".")[1]
+            payload += "=" * (-len(payload) % 4)
+            scope = _json.loads(base64.urlsafe_b64decode(payload)).get("scope")
+        except Exception:
+            scope = "decode-failed"
     return {
+        "app_version": "2026-09-20.7-wofix",
         "client_id_set": bool(os.environ.get("DATABRICKS_CLIENT_ID")),
         "host": os.environ.get("DATABRICKS_HOST", ""),
-        "x_headers": hdrs,
+        "email": request.headers.get("x-forwarded-email"),
+        "token_len": len(tok),
+        "token_scope": scope,
     }
+
 
 
 # ---------------------------------------------------------------- api: dashboard
 
 
 @app.get("/api/dashboard")
-def dashboard():
-    w = sp_client()
+def dashboard(x_forwarded_access_token: Optional[str] = Header(default=None)):
     t0 = time.time()
     payload: dict[str, Any] = {}
 
     def run(key: str, sql: str):
-        payload[key] = q(w, sql)
+        payload[key] = sql_authed(x_forwarded_access_token, sql)
 
     from concurrent.futures import ThreadPoolExecutor
 
@@ -222,14 +284,31 @@ def dashboard():
     return payload
 
 
+# ---------------------------------------------------------------- api: fleet map
+
+
+@app.get("/api/fleet-map")
+def fleet_map(x_forwarded_access_token: Optional[str] = Header(default=None)):
+    rows = sql_authed(
+        x_forwarded_access_token,
+        f"""
+        SELECT m.equipment_id, m.equipment_class, m.latitude, m.longitude,
+               COALESCE(h.health_risk_score, 0) AS health_risk_score
+        FROM {CATALOG}.{SCHEMA}.gold_machine_status m
+        LEFT JOIN {CATALOG}.{SCHEMA}.gold_health_score h ON m.equipment_id = h.equipment_id
+        ORDER BY m.equipment_id
+        """,
+    )
+    return {"machines": rows}
+
+
 # ---------------------------------------------------------------- api: equipment list (for propose modal)
 
 
 @app.get("/api/equipment")
-def equipment():
-    w = sp_client()
-    rows = q(
-        w,
+def equipment(x_forwarded_access_token: Optional[str] = Header(default=None)):
+    rows = sql_authed(
+        x_forwarded_access_token,
         f"""
         SELECT m.equipment_id, m.equipment_class,
                COALESCE(h.health_risk_score, 0) AS health_risk_score
@@ -251,21 +330,24 @@ class ProposeRequest(BaseModel):
 
 
 @app.post("/api/work-orders/propose")
-def propose_work_order(body: ProposeRequest, request: Request, x_forwarded_access_token: Optional[str] = Header(default=None)):
+def propose_work_order(
+    body: ProposeRequest,
+    request: Request,
+    x_forwarded_access_token: Optional[str] = Header(default=None),
+):
     if body.priority not in ("LOW", "MEDIUM", "HIGH", "CRITICAL"):
         raise HTTPException(status_code=400, detail="priority must be LOW|MEDIUM|HIGH|CRITICAL")
-    w = acting_client(x_forwarded_access_token)
-    email = acting_email(request, x_forwarded_access_token)
+    email = acting_email(request)
     eq = body.equipment_id.replace("'", "")
     notes = body.notes.replace("'", "''")
     log.info("propose_work_order by %s: %s (%s)", email, eq, body.priority)
-    run_sql(
-        w,
+    sql_authed(
+        x_forwarded_access_token,
         f"CALL {CATALOG}.{SCHEMA}.propose_work_order('{eq}', '{body.priority}', '{notes}', '{email}')",
-        timeout_s="60s",
+        timeout_s="50s",
     )
-    rows = q(
-        viewer_client(x_forwarded_access_token),
+    rows = sql_authed(
+        x_forwarded_access_token,
         f"SELECT order_id, equipment_id, priority, status, notes, created_by, created_at "
         f"FROM {CATALOG}.{SCHEMA}.work_orders WHERE equipment_id = '{eq}' ORDER BY created_at DESC LIMIT 1",
     )
@@ -275,18 +357,21 @@ def propose_work_order(body: ProposeRequest, request: Request, x_forwarded_acces
 
 
 @app.post("/api/work-orders/{order_id}/approve")
-def approve_work_order(order_id: str, request: Request, x_forwarded_access_token: Optional[str] = Header(default=None)):
-    w = acting_client(x_forwarded_access_token)
-    email = acting_email(request, x_forwarded_access_token)
+def approve_work_order(
+    order_id: str,
+    request: Request,
+    x_forwarded_access_token: Optional[str] = Header(default=None),
+):
+    email = acting_email(request)
     oid = order_id.replace("'", "")
     log.info("approve_work_order by %s: %s", email, oid)
-    run_sql(
-        w,
+    sql_authed(
+        x_forwarded_access_token,
         f"CALL {CATALOG}.{SCHEMA}.approve_work_order('{oid}', '{email}')",
-        timeout_s="60s",
+        timeout_s="50s",
     )
-    rows = q(
-        viewer_client(x_forwarded_access_token),
+    rows = sql_authed(
+        x_forwarded_access_token,
         f"SELECT order_id, equipment_id, priority, status, notes, created_by, created_at "
         f"FROM {CATALOG}.{SCHEMA}.work_orders WHERE order_id = '{oid}'",
     )
@@ -303,92 +388,129 @@ class CopilotRequest(BaseModel):
     conversation_id: Optional[str] = None
 
 
-@app.post("/api/copilot")
-def copilot(body: CopilotRequest, x_forwarded_access_token: Optional[str] = Header(default=None)):
-    """Genie natural-language query. Primary: app service principal (SP).
-    If the SP lacks access to the Genie space, falls back to the logged-in
-    user's OBO identity."""
-    import datetime
+def _genie_start(w: WorkspaceClient, message: str, conversation_id: Optional[str]):
+    """Fire a Genie message; returns (conversation_id, message_id) immediately."""
+    if conversation_id:
+        started = w.genie.create_message(
+            space_id=GENIE_SPACE_ID, conversation_id=conversation_id, content=message
+        )
+        return conversation_id, started.message_id
+    started = w.genie.start_conversation(space_id=GENIE_SPACE_ID, content=message)
+    return started.conversation_id, started.message_id
 
+
+def _genie_terminal(status: Optional[str]) -> bool:
+    return bool(status) and any(
+        s in status for s in ("COMPLETED", "FAILED", "CANCELLED", "TIMEOUT")
+    )
+
+
+def _genie_result(w: WorkspaceClient, conv_id: str, msg_id: str) -> dict:
+    """One poll: message status, plus answer/SQL/rows when COMPLETED."""
+    msg = w.genie.get_message(space_id=GENIE_SPACE_ID, conversation_id=conv_id, message_id=msg_id)
+    raw = str(msg.status) if msg and msg.status else None
+    # SDK enum str() is "MessageStatus.COMPLETED" — normalize to the bare word,
+    # otherwise the exact != "COMPLETED" compare below always early-returns and
+    # the answer/attachments are never extracted.
+    status = raw.split(".")[-1] if raw else None
+    out = {"conversation_id": conv_id, "message_id": msg_id, "status": status}
+    err = getattr(msg, "error", None)
+    if err:
+        out["error"] = str(err)
+    if status != "COMPLETED":
+        return out
+    if err:
+        # Message flipped to FAILED post-hoc under the SP identity — surface it
+        # instead of a silent empty answer.
+        out["status"] = "FAILED"
+        return out
+
+    # Genie flips status to COMPLETED while the attachment payload is still
+    # filling in (attachment list can even appear empty on the first polls).
+    # Only treat it as done once real content (text / SQL / rows) is present,
+    # otherwise report pending so the client keeps polling.
+    answer_text = ""
+    sql_text = ""
+    rows: list[dict] = []
+    columns: list[str] = []
+    for att in msg.attachments or []:
+        if att.text and att.text.content:
+            c = att.text.content
+            if c not in answer_text:  # Genie sometimes attaches the same text twice
+                answer_text += (answer_text + "\n\n" if answer_text else "") + c
+        if att.query:
+            sql_text = att.query.query or sql_text
+            att_id = att.attachment_id or att.query.id
+            if att_id:
+                try:
+                    qr = w.genie.get_message_query_result_by_attachment(
+                        space_id=GENIE_SPACE_ID, conversation_id=conv_id,
+                        message_id=msg_id, attachment_id=att_id,
+                    )
+                    sr = qr.statement_response
+                    if sr:
+                        columns = [c.name for c in sr.manifest.schema.columns]
+                        data = sr.result.data_array if sr.result and sr.result.data_array else []
+                        rows = [dict(zip(columns, r)) for r in data]
+                except Exception as e:
+                    log.warning("genie query result fetch failed: %s", e)
+    if not answer_text.strip() and not sql_text.strip() and not rows:
+        out["status"] = "PENDING"
+        return out
+    out.update({"answer": answer_text.strip(), "sql": sql_text,
+                "columns": columns, "rows": rows[:50]})
+    return out
+
+
+@app.post("/api/copilot/start")
+def copilot_start(body: CopilotRequest, x_forwarded_access_token: Optional[str] = Header(default=None)):
+    """Kick off a Genie message and return its IDs at once. The client polls
+    /api/copilot/status — a synchronous wait would hit the Apps gateway's
+    ~60s timeout on slow Genie answers (observed 504s)."""
     message = body.message.strip()
     if not message:
         raise HTTPException(status_code=400, detail="message is required")
 
-    SID = GENIE_SPACE_ID
-
-    def genie_exchange(w: WorkspaceClient):
-        if body.conversation_id:
-            started = w.genie.create_message(space_id=SID, conversation_id=body.conversation_id, content=message)
-            conv_id = body.conversation_id
-        else:
-            started = w.genie.start_conversation(space_id=SID, content=message)
-            conv_id = started.conversation_id
-        msg_id = started.message_id
-
-        deadline = time.time() + 120
-        msg = None
-        status = None
-        while time.time() < deadline:
-            time.sleep(2.5)
-            msg = w.genie.get_message(space_id=SID, conversation_id=conv_id, message_id=msg_id)
-            status = str(msg.status) if msg and msg.status else None
-            if status and ("COMPLETED" in status or "FAILED" in status or "CANCELLED" in status or "TIMEOUT" in status):
-                break
-
-        answer_text = ""
-        sql_text = ""
-        rows: list[dict] = []
-        columns: list[str] = []
-        if status and "COMPLETED" in status:
-            for att in msg.attachments or []:
-                if att.text and att.text.content:
-                    answer_text += (answer_text + "\n\n" if answer_text else "") + att.text.content
-                if att.query:
-                    sql_text = att.query.query or sql_text
-                    att_id = att.attachment_id or att.query.id
-                    if att_id:
-                        try:
-                            qr = w.genie.get_message_query_result_by_attachment(
-                                space_id=SID, conversation_id=conv_id, message_id=msg_id, attachment_id=att_id
-                            )
-                            sr = qr.statement_response
-                            if sr:
-                                columns = [c.name for c in sr.manifest.schema.columns]
-                                data = sr.result.data_array if sr.result and sr.result.data_array else []
-                                rows = [dict(zip(columns, r)) for r in data]
-                        except Exception as e:
-                            log.warning("genie query result fetch failed: %s", e)
-
-        return conv_id, msg_id, status, answer_text, sql_text, columns, rows
-
-    # primary: app service principal
+    # OBO first: chat runs under the logged-in user's identity and UC grants
+    # (the demo's "AI acts under human governance" story). The SP path also
+    # flips messages COMPLETED->FAILED post-hoc (restricted tool access), so it
+    # is fallback only.
+    obo = user_client(x_forwarded_access_token)
+    if obo:
+        try:
+            conv_id, msg_id = _genie_start(obo, message, body.conversation_id)
+            return {"conversation_id": conv_id, "message_id": msg_id, "auth": "obo"}
+        except Exception as obo_err:
+            d = str(obo_err)
+            if "required scopes: genie" in d or "required scopes: sql" in d:
+                # Missing user API scopes = stale consent, not a fatal config error.
+                # Fall through to the SP path so chat still works; the OBO story
+                # returns once the user re-consents (logout -> login -> approve).
+                log.warning("OBO token missing api scopes; falling back to SP")
+            else:
+                log.warning("genie start via OBO failed (%s); retrying with SP", d[:200])
     w = sp_client()
     try:
-        conv_id, msg_id, status, answer_text, sql_text, columns, rows = genie_exchange(w)
-        auth_used = "sp"
+        conv_id, msg_id = _genie_start(w, message, body.conversation_id)
+        return {"conversation_id": conv_id, "message_id": msg_id, "auth": "sp"}
     except Exception as sp_err:
-        # fallback: on-behalf-of user identity (e.g. SP lacks Genie space access)
-        obo = user_client(x_forwarded_access_token)
-        if not obo:
-            log.error("genie via SP failed and no OBO token available: %s", sp_err)
-            raise HTTPException(status_code=502, detail=f"Genie failed: {sp_err}")
-        log.warning("genie via SP failed (%s); retrying with OBO user identity", sp_err)
-        conv_id, msg_id, status, answer_text, sql_text, columns, rows = genie_exchange(obo)
-        auth_used = "obo"
+        raise HTTPException(status_code=502, detail=f"Genie failed: {str(sp_err)[:200]}")
 
-    if not status or "COMPLETED" not in status:
-        raise HTTPException(status_code=504, detail=f"Genie did not complete in time (status={status})")
 
-    return {
-        "conversation_id": conv_id,
-        "message_id": msg_id,
-        "status": status,
-        "auth": auth_used,
-        "answer": answer_text.strip(),
-        "sql": sql_text,
-        "columns": columns,
-        "rows": rows[:50],
-    }
+@app.get("/api/copilot/status")
+def copilot_status(
+    conversation_id: str,
+    message_id: str,
+    auth: str = "obo",
+    x_forwarded_access_token: Optional[str] = Header(default=None),
+):
+    if auth == "sp":
+        w = sp_client()
+    else:
+        w = user_client(x_forwarded_access_token)
+    if not w:
+        raise HTTPException(status_code=502, detail="no usable credentials for Genie status poll")
+    return _genie_result(w, conversation_id, message_id)
 
 
 # ---------------------------------------------------------------- static frontend
