@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Architecture Diagram</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet" />
+  <style>
+    :root { --charcoal:#1c1c1c; --dim:#494949; --faint:#737373; --border:#d6d6d6; --bg:#f6f7f8; --green:#008545; --red:#d23b12; --yellow:#fed203; }
+    * { box-sizing: border-box; }
+    body { margin:0; background:var(--bg); color:var(--charcoal); font-family:"Roboto","Helvetica Neue",helvetica,arial,sans-serif; font-size:14px; display:flex; flex-direction:column; min-height:100vh; }
+    #fit { flex:1; display:flex; flex-direction:column; justify-content:center; }
+    .topbar { display:flex; align-items:center; padding:10px 20px; background:#fff; border-bottom:4px solid var(--green); box-shadow:0 2px 10px rgba(28,28,28,0.07); }
+    .topbar h1 { margin:0; font-size:17px; font-weight:700; }
+    .topbar span { font-size:12px; color:var(--faint); }
+    .topbar a.back { margin-left:auto; text-decoration:none; font-size:12px; font-weight:600; color:var(--charcoal); background:var(--yellow); padding:6px 12px; border-radius:8px; }
+    .wrap { max-width:none; margin:0 auto; padding:14px 20px 8px; }
+
+    .lane { display:flex; flex-wrap:wrap; align-items:stretch; column-gap:24px; row-gap:12px; }
+    .lane-label { font-size:10px; font-weight:700; letter-spacing:0.8px; text-transform:uppercase; color:var(--faint); margin:0; flex:0 0 100%; }
+    .node {
+      width: 190px; min-height: 82px; background:#fff; border:1px solid var(--border); border-radius:10px;
+      padding:9px 12px; flex:0 0 auto;
+    }
+    .node h3 { margin:2px 0 3px; font-size:13px; font-weight:700; line-height:1.25; }
+    .node p { margin:0; font-size:10.5px; color:var(--dim); line-height:1.35; }
+    .tag { display:inline-block; font-size:9px; font-weight:700; letter-spacing:0.5px; text-transform:uppercase; border-radius:999px; padding:2px 8px; }
+    .t-sim { background:rgba(254,210,3,0.35); color:#7a5c00; }
+    .t-delta { background:rgba(0,115,120,0.12); color:#00595d; }
+    .t-sdp { background:rgba(0,133,69,0.14); color:var(--green); }
+    .t-serve { background:rgba(28,28,28,0.08); color:var(--charcoal); }
+    .t-hitl { background:rgba(210,59,18,0.1); color:#b23009; }
+
+    .harrow { display:flex; flex-direction:column; justify-content:center; align-items:center; width:64px; flex:0 0 auto; }
+    .harrow .line { width:100%; height:2px; background:#9a9a9a; position:relative; }
+    .harrow .line::after { content:""; position:absolute; right:-1px; top:-4px; border-left:7px solid #9a9a9a; border-top:5px solid transparent; border-bottom:5px solid transparent; }
+    .harrow em { font-style:normal; font-size:9.5px; color:var(--faint); margin-top:4px; white-space:nowrap; }
+
+    .vconn { display:flex; align-items:center; gap:8px; margin:9px 0; }
+    .vconn .vline { width:2px; height:22px; background:#9a9a9a; position:relative; flex:0 0 auto; }
+    .vconn .vline::after { content:""; position:absolute; bottom:-1px; left:-4px; border-top:7px solid #9a9a9a; border-left:5px solid transparent; border-right:5px solid transparent; }
+    .vconn em { font-style:normal; font-size:10.5px; color:var(--faint); }
+    .vconn.red .vline { background:var(--red); }
+    .vconn.red .vline::after { border-top-color:var(--red); }
+    .vconn.red em { color:#b23009; }
+
+    .lane.loop { background:rgba(210,59,18,0.03); border:1.6px dashed rgba(210,59,18,0.5); border-radius:12px; padding:12px 16px 13px; }
+    .lane.loop .node { border-color:rgba(210,59,18,0.45); background:#fdf5f2; }
+    .lane.loop .lane-label { color:#b23009; }
+    .lane.group { background:rgba(0,115,120,0.03); border:1.6px dashed rgba(0,115,120,0.5); border-radius:12px; padding:12px 16px 13px; }
+    .lane.group .lane-label { color:#00595d; }
+    .lane.group.serve { background:rgba(0,133,69,0.03); border-color:rgba(0,133,69,0.5); }
+    .lane.group.serve .lane-label { color:var(--green); }
+    .lane.group.iot { background:rgba(254,210,3,0.07); border-color:rgba(200,160,0,0.55); }
+    .lane.group.iot .lane-label { color:#7a5c00; }
+
+    .flow { position:relative; }
+    .foot { max-width:none; margin:0 auto; padding:4px 20px 10px; font-size:10.5px; color:var(--faint); line-height:1.5; }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <h1>Architecture Diagram</h1>
+    <a class="back" href="/">← Back to app</a>
+  </div>
+  <div id="fit">
+  <div class="wrap">
+    <div class="flow">
+      <div class="lane group iot" style="--i:0">
+        <div class="lane-label">IoT data</div>
+        <div class="node">
+          <span class="tag t-sim">Simulated fleet</span>
+          <h3>300 machines · 12 yards</h3>
+          <p>Charlotte NC metro + SC<br/>battery · fuel · GPS · hours</p>
+        </div>
+        <div class="harrow"><div class="line"></div><em>ticks</em></div>
+        <div class="node">
+          <span class="tag t-sim">Ingest job · every 5 min</span>
+          <h3>Live telemetry tick</h3>
+          <p>serverless · 300 rows/tick<br/>Delta append (ZeroBus-ready)</p>
+        </div>
+      </div>
+
+      <div class="vconn" style="margin-left:64px"><div class="vline"></div><em>append</em></div>
+
+      <div class="lane group" style="--i:1">
+        <div class="lane-label">Lakeflow SDP pipeline — curate &amp; quality gates</div>
+        <div class="node">
+          <span class="tag t-delta">Bronze</span>
+          <h3>bronze_telemetry</h3>
+          <p>raw append-only ticks<br/>~1.7M rows · OEM payload</p>
+        </div>
+        <div class="harrow"><div class="line"></div><em>dedupe + DQ</em></div>
+        <div class="node">
+          <span class="tag t-sdp">Silver — SDP</span>
+          <h3>silver_telemetry</h3>
+          <p>clean ticks · bad rows<br/>quarantined w/ full accounting</p>
+        </div>
+        <div class="harrow"><div class="line"></div><em>curate</em></div>
+        <div class="node">
+          <span class="tag t-sdp">Gold — SDP</span>
+          <h3>gold × 4</h3>
+          <p>machine_status · events<br/>health_score · daily_agg</p>
+        </div>
+      </div>
+
+      <div class="vconn" style="margin-left:64px"><div class="vline"></div><em>governed reads — one catalog, four surfaces</em></div>
+
+      <div class="lane group serve" style="--i:2">
+        <div class="lane-label">Serving</div>
+        <div class="node">
+          <span class="tag t-serve">Metric views</span>
+          <h3>4 governed measures</h3>
+          <p>health · utilization · fuel<br/>anomalies · open work orders</p>
+        </div>
+        <div class="node">
+          <span class="tag t-serve">Genie space</span>
+          <h3>Natural-language Q&A</h3>
+          <p>governed SQL over gold,<br/>cited answers · MCP endpoint</p>
+        </div>
+        <div class="node">
+          <span class="tag t-serve">AI/BI dashboard</span>
+          <h3>Exec KPIs</h3>
+          <p>at-risk counts · utilization<br/>published, embed credentials</p>
+        </div>
+        <div class="node">
+          <span class="tag t-serve">Apps</span>
+          <h3>IoT Fleet Health Center</h3>
+          <p>dashboard · fleet map · chat<br/>SP reads · OBO Genie</p>
+        </div>
+        <div class="node">
+          <span class="tag t-serve">Copilot</span>
+          <h3>Genie chat in-app</h3>
+          <p>✦ Genie panel · OBO auth<br/>async Q&amp;A over gold</p>
+        </div>
+        <div class="node">
+          <span class="tag t-serve">Teams</span>
+          <h3>Genie in Microsoft Teams</h3>
+          <p>MCP endpoint · bot channel<br/>answers cited from gold</p>
+        </div>
+      </div>
+
+      <div class="vconn red" style="margin-left:64px"><div class="vline"></div><em>Human or AI based recommendations — app form, Genie chat, or an agent</em></div>
+
+      <div class="lane loop" style="--i:3">
+        <div class="lane-label">The action loop — human-in-the-loop (Act 4)</div>
+        <div class="node">
+          <span class="tag t-hitl">1 · Human or AI proposes</span>
+          <h3>propose_work_order</h3>
+          <p>PENDING_APPROVAL row,<br/>proposer audited · alert sent</p>
+        </div>
+        <div class="harrow"><div class="line"></div><em>gate</em></div>
+        <div class="node">
+          <span class="tag t-hitl">2 · Human approves</span>
+          <h3>approve_work_order</h3>
+          <p>the HITL gate — only a human<br/>flips to OPEN · approver audited</p>
+        </div>
+        <div class="harrow"><div class="line"></div><em>dispatch</em></div>
+        <div class="node">
+          <span class="tag t-hitl">3 · Work ordered</span>
+          <h3>work_orders (OPEN)</h3>
+          <p>fix dispatched — telemetry<br/>closes the loop on recovery</p>
+        </div>
+      </div>
+    </div>
+  </div>
+  </div>
+  <script>
+    // Scale the whole page down (never up) so the diagram always fits one
+    // screen without scrolling, regardless of window size.
+    function fitPage() {
+      const el = document.getElementById("fit");
+      el.style.transform = "none";
+      el.style.width = "100%";
+      const h = el.scrollHeight, w = el.scrollWidth;
+      const s = Math.min(1, window.innerHeight / (h + 6), window.innerWidth / w);
+      if (s < 1) {
+        el.style.transformOrigin = "top left";
+        el.style.transform = "scale(" + s + ")";
+        el.style.width = (100 / s) + "%";
+        el.style.height = (h * s) + "px";
+      } else {
+        el.style.height = "";
+      }
+    }
+    window.addEventListener("resize", fitPage);
+    window.addEventListener("load", fitPage);
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitPage);
+    fitPage();
+  </script>
+</body>
+</html>

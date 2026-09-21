@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { apiPost } from "../api.js";
+import { apiGet, apiPost } from "../api.js";
 
 function renderMarkdown(text) {
   // minimal markdown: **bold** + line breaks
@@ -29,12 +29,32 @@ export default function Copilot({ open, onClose }) {
     setError("");
     setBusy(true);
     setMessages((m) => [...m, { role: "user", text }, { role: "assistant", loading: true }]);
+    requestAnimationFrame(() => listRef.current?.scrollTo(0, listRef.current.scrollHeight));
     try {
-      const res = await apiPost("/api/copilot", {
+      const started = await apiPost("/api/copilot/start", {
         message: text,
         conversation_id: conversationId.current,
       });
-      conversationId.current = res.conversation_id;
+      conversationId.current = started.conversation_id;
+      // Poll status — Genie answers range ~10s to >90s, longer than the Apps
+      // gateway allows for one proxied request, so a single sync call 504s.
+      const deadline = Date.now() + 180000;
+      let res = null;
+      while (Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 3000));
+        res = await apiGet(
+          `/api/copilot/status?conversation_id=${encodeURIComponent(started.conversation_id)}` +
+            `&message_id=${encodeURIComponent(started.message_id)}&auth=${started.auth}`
+        );
+        if (["COMPLETED", "FAILED", "CANCELLED", "TIMEOUT"].some((s) => (res.status || "").includes(s)))
+          break;
+      }
+      if (!res || !((res.status || "").includes("COMPLETED"))) {
+        throw new Error(
+          `Genie did not complete (status=${res ? res.status : "unknown"})` +
+            (res && res.error ? ` — ${res.error}` : "")
+        );
+      }
       setMessages((m) => {
         const next = [...m];
         next[next.length - 1] = {
@@ -63,7 +83,7 @@ export default function Copilot({ open, onClose }) {
       <div className={`copilot-drawer ${open ? "open" : ""}`}>
         <div className="copilot-head">
           <div>
-            <h3>Fleet Copilot</h3>
+            <h3>Fleet Genie</h3>
             <span className="card-sub">Ask about your fleet in plain English</span>
           </div>
           <button className="modal-x" onClick={onClose}>
@@ -118,7 +138,7 @@ export default function Copilot({ open, onClose }) {
               </div>
             )
           )}
-          {busy && <div className="typing-row">Copilot is thinking…</div>}
+          {busy && <div className="typing-row">Genie is thinking…</div>}
         </div>
         <form className="copilot-input" onSubmit={ask}>
           <input

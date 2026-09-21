@@ -23,14 +23,18 @@ BEGIN
          current_timestamp();
 END;
 
+-- approve_work_order: params use the p_ prefix — bare params that match column
+-- names (order_id) are shadowed by the column in the UPDATE WHERE clause, which
+-- made "w.order_id = order_id" always true and approved EVERY pending row
+-- (bug found live 2026-09-20). Positional CALL signature unchanged.
 CREATE OR REPLACE PROCEDURE sbr_iot_demo.fleet.approve_work_order(
-  IN order_id STRING,
-  IN approved_by STRING
+  IN p_order_id STRING,
+  IN p_approved_by STRING
 )
 SQL SECURITY INVOKER
 LANGUAGE SQL
 BEGIN
   UPDATE sbr_iot_demo.fleet.work_orders AS w
-  SET status = 'OPEN', notes = concat(notes, ' | approved by ', approved_by)
-  WHERE w.order_id = order_id AND w.status = 'PENDING_APPROVAL';
+  SET status = 'OPEN', notes = concat(notes, ' | approved by ', p_approved_by)
+  WHERE w.order_id = p_order_id AND w.status = 'PENDING_APPROVAL';
 END;

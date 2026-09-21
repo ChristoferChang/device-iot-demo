@@ -16,20 +16,29 @@ databricks apps deploy sbr-fleet-copilot \
   --profile fevm-azure
 ```
 
-## Auth gate (REQUIRED before the dashboard renders data)
+## Auth model (current)
 
-The app reads/writes on-behalf-of the logged-in user (OBO). The app's user authorization currently
-only has scopes `iam.current-user:read, iam.access-control:read` — the warehouse API needs the
-**`sql` scope**. Until added, the dashboard shows a banner: "No SQL warehouse access for this identity…".
+Primary = app service principal (injected DATABRICKS_CLIENT_ID/SECRET) for ALL warehouse SQL,
+procedure CALLs, and Genie. OBO headers (x-forwarded-access-token / x-forwarded-email) are used
+only for the approver identity, plus an automatic SQL fallback when the SP lacks UC grants
+(/api/debug/auth shows the session token's scopes).
 
-Two equivalent one-step fixes (either works):
-1. Apps UI → `sbr-fleet-copilot` → Authorization → add user API scope `sql`, then re-open the app
-   and re-consent. (Equivalent API: `PATCH /api/2.0/apps/sbr-fleet-copilot` with
-   `{"user_api_scopes": [..., "sql"]}`.)
-2. Or grant the app's service principal `a10e4f96-5338-4016-adb8-cbd7a151530d` `CAN_USE` on
-   SQL warehouse `d0163299fb00cd64` (SP fallback then serves all queries).
+The SP has CAN_USE on warehouse d0163299fb00cd64 but still needs Unity Catalog grants. Until
+these are run (as catalog owner/admin, e.g. chris.chang@databricks.com), SQL fails with
+INSUFFICIENT_PERMISSIONS and the UI banner shows the same fix:
 
-Option 1 is preferred — all data access then respects the viewer's own UC permissions.
+```sql
+GRANT USE CATALOG ON CATALOG sbr_iot_demo TO `a10e4f96-5338-4016-adb8-cbd7a151530d`;
+GRANT USE SCHEMA ON SCHEMA sbr_iot_demo.fleet TO `a10e4f96-5338-4016-adb8-cbd7a151530d`;
+GRANT SELECT ON SCHEMA sbr_iot_demo.fleet TO `a10e4f96-5338-4016-adb8-cbd7a151530d`;
+GRANT MODIFY ON TABLE sbr_iot_demo.fleet.work_orders TO `a10e4f96-5338-4016-adb8-cbd7a151530d`;
+GRANT EXECUTE ON PROCEDURE sbr_iot_demo.fleet.propose_work_order TO `a10e4f96-5338-4016-adb8-cbd7a151530d`;
+GRANT EXECUTE ON PROCEDURE sbr_iot_demo.fleet.approve_work_order TO `a10e4f96-5338-4016-adb8-cbd7a151530d`;
+```
+
+For the Genie chat pane: the app SP needs CAN_RUN on the Genie space 01f1b456af5d124aacf95d5f5d8e3636
+(+ the UC grants above for its generated SQL). Alternatively add the `genie` user API scope so the
+OBO fallback can run Genie as the user. Until one of those, chat returns a 502 with a hint.
 
 ## Email alerts (deferred by user)
 

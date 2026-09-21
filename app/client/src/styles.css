@@ -40,7 +40,7 @@ body {
 /* ---------- topbar ---------- */
 .topbar {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 18px 28px; margin: 0 -28px 24px; position: sticky; top: 0; z-index: 40;
+  padding: 18px 28px; margin: 0 0 24px; position: sticky; top: 0; z-index: 40;
   background: var(--bg-elev); border-bottom: 4px solid var(--green);
   box-shadow: 0 2px 10px rgba(28, 28, 28, 0.07);
 }

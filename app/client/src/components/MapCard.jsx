@@ -3,15 +3,28 @@ import { Map as MapLibre, Marker, Popup, AttributionControl } from "maplibre-gl"
 import "maplibre-gl/dist/maplibre-gl.css";
 import { apiGet } from "../api.js";
 
-const TILE_STYLE = "https://demotiles.maplibre.org/style.json";
-const CENTER = [-80.9, 34.6];
-const ZOOM = 6;
+// Self-contained raster style: no external style JSON, no vector-tile worker
+// parsing — avoids silent style-load stalls seen with remote vector styles.
+const TILE_STYLE = {
+  version: 8,
+  sources: {
+    osm: {
+      type: "raster",
+      tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
+      tileSize: 256,
+      attribution: "© OpenStreetMap contributors",
+    },
+  },
+  layers: [{ id: "osm", type: "raster", source: "osm" }],
+};
+const CENTER = [-80.75, 34.75];
+const ZOOM = 7;
 
 function riskColor(score) {
   const s = Number(score) || 0;
   if (s >= 20) return "#d23b12"; // red — critical
   if (s > 0) return "#e08700";   // amber — at-risk
-  return "#737373";               // grey — healthy
+  return "#008545";              // Sunbelt green — healthy
 }
 
 export default function MapCard() {
@@ -22,6 +35,9 @@ export default function MapCard() {
   const [machines, setMachines] = useState([]);
   const [error, setError] = useState(null);
   const [mapReady, setMapReady] = useState(false);
+  // Legend focus filter: "all" | "healthy" | "atRisk" | "critical" — clicking a
+  // legend category dims the other pins and raises the selected ones.
+  const [focus, setFocus] = useState("all");
 
   // Load fleet-map data
   useEffect(() => {
@@ -51,6 +67,11 @@ export default function MapCard() {
     });
     map.addControl(new AttributionControl({ compact: true }), "bottom-right");
     map.on("load", () => setMapReady(true));
+    map.on("error", (e) => {
+      // Surface style/tile failures instead of failing silently on a blank canvas.
+      const msg = e?.error?.message || String(e?.error || e || "");
+      if (msg && !msg.includes("Failed to fetch")) console.warn("maplibre:", msg);
+    });
     mapRef.current = map;
     return () => {
       map.remove();
@@ -58,10 +79,12 @@ export default function MapCard() {
     };
   }, []);
 
-  // Place/update markers whenever map is ready and data changes
+  // Place/update markers as soon as the map instance exists and data changes —
+  // markers are DOM overlays positioned by projection math, so they do not
+  // depend on the basemap style finishing loading.
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !mapReady || machines.length === 0) return;
+    if (!map || machines.length === 0) return;
 
     // Remove old markers
     markersRef.current.forEach((m) => m.remove());
@@ -77,18 +100,21 @@ export default function MapCard() {
       if (!isFinite(lat) || !isFinite(lon)) return;
 
       const el = document.createElement("div");
-      el.className = "fleet-marker";
       const score = Number(m.health_risk_score) || 0;
+      el.className = "fleet-marker" + (score >= 20 ? " fleet-marker-critical" : "");
       const color = riskColor(score);
       Object.assign(el.style, {
-        width: "10px",
-        height: "10px",
+        width: "13px",
+        height: "13px",
         borderRadius: "50%",
         background: color,
-        border: "1.5px solid rgba(255,255,255,0.8)",
+        border: "2px solid rgba(255,255,255,0.95)",
         cursor: "pointer",
-        boxShadow: score >= 20 ? `0 0 0 3px ${color}44` : "none",
+        boxShadow: "0 1px 4px rgba(28,28,28,0.4)",
+        transition: "opacity 0.25s ease",
       });
+      // Critical pins always stack above at-risk, which stack above healthy.
+      el.style.zIndex = score >= 20 ? "600" : score > 0 ? "400" : "200";
 
       el.addEventListener("mouseenter", () => {
         popup
@@ -105,15 +131,34 @@ export default function MapCard() {
       el.addEventListener("mouseleave", () => popup.remove());
 
       const marker = new Marker({ element: el }).setLngLat([lon, lat]).addTo(map);
-      markersRef.current.push(marker);
+      markersRef.current.push({ marker, el, score });
     });
 
     return () => {
-      markersRef.current.forEach((m) => m.remove());
+      markersRef.current.forEach((m) => m.marker.remove());
       markersRef.current = [];
       if (popupRef.current) { popupRef.current.remove(); popupRef.current = null; }
     };
-  }, [machines, mapReady]);
+  }, [machines]);
+
+  // Apply legend focus: dim non-selected pins and lift selected ones above the
+  // rest. Kept as its own effect so highlight state never depends on marker
+  // rebuild ordering.
+  useEffect(() => {
+    markersRef.current.forEach(({ el, score }) => {
+      const base = score >= 20 ? "600" : score > 0 ? "400" : "200";
+      const selected =
+        focus === "all" ||
+        (focus === "healthy" && score === 0) ||
+        (focus === "atRisk" && score > 0 && score < 20) ||
+        (focus === "critical" && score >= 20);
+      el.style.opacity = selected ? "1" : "0.15";
+      // Severity order governs stacking by default; the 900 boost applies only
+      // when a legend filter is actively highlighting a group.
+      el.style.zIndex = focus !== "all" && selected ? "900" : base;
+      if (el.parentElement) el.parentElement.style.zIndex = focus !== "all" && selected ? "600" : "10";
+    });
+  }, [focus, machines]);
 
   const critical = machines.filter((m) => Number(m.health_risk_score) >= 20).length;
   const atRisk = machines.filter((m) => Number(m.health_risk_score) > 0 && Number(m.health_risk_score) < 20).length;
@@ -124,13 +169,25 @@ export default function MapCard() {
       <div className="card-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <h2 className="card-title">Fleet Location Map</h2>
         <div className="map-legend">
-          <span className="legend-item"><span className="legend-dot" style={{ background: "#737373" }} />{healthy} healthy</span>
-          <span className="legend-item"><span className="legend-dot" style={{ background: "#e08700" }} />{atRisk} at-risk</span>
-          <span className="legend-item"><span className="legend-dot" style={{ background: "#d23b12" }} />{critical} critical</span>
+          {[
+            { key: "healthy", label: "healthy", count: healthy, color: "#008545" },
+            { key: "atRisk", label: "at-risk", count: atRisk, color: "#e08700" },
+            { key: "critical", label: "critical", count: critical, color: "#d23b12" },
+          ].map((item) => (
+            <button
+              key={item.key}
+              className={"legend-item legend-btn" + (focus === item.key ? " legend-active" : "")}
+              title={focus === item.key ? "Show all machines" : `Highlight ${item.label} machines`}
+              onClick={() => setFocus(focus === item.key ? "all" : item.key)}
+            >
+              <span className="legend-dot" style={{ background: item.color }} />
+              {item.count} {item.label}
+            </button>
+          ))}
         </div>
       </div>
       {error && <div style={{ color: "#d23b12", padding: "8px 0", fontSize: 13 }}>Map error: {error}</div>}
-      <div ref={containerRef} style={{ width: "100%", height: 300, borderRadius: 8, overflow: "hidden", background: "#e8eaed" }} />
+      <div ref={containerRef} style={{ width: "100%", height: 460, borderRadius: 8, overflow: "hidden", background: "#e8eaed" }} />
     </div>
   );
 }

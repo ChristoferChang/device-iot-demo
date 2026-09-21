@@ -68,7 +68,7 @@ export default function App() {
   const openOrders = (data?.work_orders || []).filter((w) => w.status !== "PENDING_APPROVAL");
 
   return (
-    <div className="shell">
+    <div>
       <header className="topbar">
         <div className="brand">
           <img src="/logo.svg" alt="Sunbelt Rentals" className="brand-logo" />
@@ -81,6 +81,9 @@ export default function App() {
           <button className="btn btn-ghost" onClick={load} title="Refresh now">
             ⟳ Refresh
           </button>
+          <a className="btn btn-ghost" href="/architecture.html" title="Architecture diagram">
+            Architecture
+          </a>
           <button className="btn btn-primary" onClick={() => setProposeFor("new")}>
             + Propose Work Order
           </button>
@@ -89,7 +92,7 @@ export default function App() {
           </button>
         </div>
       </header>
-
+      <div className="shell">
       {error && <div className="banner-error">Dashboard load failed: {error}</div>}
 
       {!data ? (
@@ -119,6 +122,7 @@ export default function App() {
           <WorkOrderHistory rows={openOrders} />
         </main>
       )}
+      </div>
 
       {proposeFor && (
         <ProposeModal
