@@ -32,17 +32,6 @@ export default function UtilizationChart({ trend }) {
   const data = [...byDay.values()].sort((a, b) => (a.day < b.day ? -1 : 1));
   const last7 = data.slice(-7).map((d) => ({ ...d, day: fmtDay(d.day) }));
 
-  // Dynamic Y domain: 50% of the value range padded beyond min and max, so
-  // trends fill the chart instead of floating in a fixed 0–100% frame.
-  const values = last7.flatMap((d) => [...classes].map((c) => d[c]).filter((v) => Number.isFinite(v)));
-  let yDomain = [0, 100];
-  if (values.length > 0) {
-    const min = Math.min(...values);
-    const max = Math.max(...values);
-    const pad = Math.max((max - min) * 0.5, 5);
-    yDomain = [min - pad, max + pad];
-  }
-
   return (
     <div className="card chart-card">
       <div className="card-head">
@@ -53,7 +42,7 @@ export default function UtilizationChart({ trend }) {
         <LineChart data={last7} margin={{ top: 8, right: 12, bottom: 0, left: -18 }}>
           <CartesianGrid stroke="#e5e5e5" vertical={false} />
           <XAxis dataKey="day" stroke="#737373" tick={{ fontSize: 11 }} tickLine={false} axisLine={{ stroke: "#d6d6d6" }} />
-          <YAxis stroke="#737373" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} unit="%" domain={yDomain} />
+          <YAxis stroke="#737373" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} unit="%" domain={[0, 100]} />
           <Tooltip
             contentStyle={{ background: "#1c1c1c", border: "1px solid #1c1c1c", borderRadius: 8, fontSize: 12 }}
             labelStyle={{ color: "#d6d6d6" }}

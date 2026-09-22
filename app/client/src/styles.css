@@ -269,6 +269,9 @@ code {
 .map-legend { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .legend-item { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--text-dim); }
 .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; border: 1.5px solid rgba(255,255,255,0.7); }
+/* Popup must always paint above markers — markers carry inline z-indexes up
+   to 900 for severity stacking, MapLibre's default popup z-index is lower. */
+.maplibregl-popup { z-index: 1200 !important; }
 .maplibregl-popup-content { padding: 8px 10px !important; border-radius: 8px !important; box-shadow: 0 4px 16px rgba(28,28,28,0.18) !important; }
 
 

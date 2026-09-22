@@ -66,6 +66,14 @@ export default function App() {
   const k = data?.kpis || {};
   const pending = (data?.work_orders || []).filter((w) => w.status === "PENDING_APPROVAL");
   const openOrders = (data?.work_orders || []).filter((w) => w.status !== "PENDING_APPROVAL");
+  // Machines with a pending or open work order have been actioned — drop them
+  // from the at-risk table so they can't be proposed for twice.
+  const activeWoIds = new Set(
+    (data?.work_orders || [])
+      .filter((w) => w.status === "PENDING_APPROVAL" || w.status === "OPEN")
+      .map((w) => w.equipment_id)
+  );
+  const atRiskRows = (data?.at_risk || []).filter((r) => !activeWoIds.has(r.equipment_id));
 
   return (
     <div>
@@ -115,7 +123,7 @@ export default function App() {
             <EventsFeed events={data.events} />
           </section>
 
-          <AtRiskTable rows={data.at_risk} onPropose={(id) => setProposeFor(id)} />
+          <AtRiskTable rows={atRiskRows} onPropose={(id) => setProposeFor(id)} />
 
           <PendingApprovals rows={pending} onApprove={approve} busyId={busyApprove} />
 
