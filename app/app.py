@@ -14,6 +14,7 @@ import time
 from pathlib import Path
 from typing import Any, Optional
 
+import psycopg
 from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
@@ -41,6 +42,66 @@ GENIE_SPACE_ID = os.environ.get("GENIE_SPACE_ID", "01f1b456af5d124aacf95d5f5d8e3
 DEFAULT_APPROVER = os.environ.get("DEFAULT_APPROVER", "fleet-ops@databricks.com")
 CATALOG = "sbr_iot_demo"
 SCHEMA = "fleet"
+
+# ------------------------------------------------- lakebase (Postgres reads)
+# Read endpoints hit Lakebase synced tables (Delta -> Postgres via continuous
+# sync). Writes (propose/approve) stay on Delta via the warehouse procedures.
+PGHOST = os.environ.get("PGHOST", "ep-green-wave-e9khetyo.database.eastus.azuredatabricks.net")
+PGPORT = int(os.environ.get("PGPORT", "5432"))
+PGDATABASE = os.environ.get("PGDATABASE", "promising")
+PGUSER = os.environ.get("PGUSER") or os.environ.get("DATABRICKS_CLIENT_ID", "")
+PG_ENDPOINT = os.environ.get(
+    "LAKEBASE_ENDPOINT", "projects/lakebase-demo-db/branches/production/endpoints/primary"
+)
+PG_SCHEMA = "fleet"
+
+_pg_token: dict[str, Any] = {"val": None, "exp": 0.0}
+
+
+def _lakebase_token() -> str:
+    """OAuth token for Postgres auth — ~1h lifetime, refresh 5 min early.
+    SDK 0.53 lacks postgres.generate_database_credential, so call
+    POST /api/2.0/postgres/credentials via api_client.do (auto token refresh)."""
+    if time.time() > _pg_token["exp"]:
+        resp = sp_client().api_client.do(
+            "POST", "/api/2.0/postgres/credentials", body={"endpoint": PG_ENDPOINT}
+        )
+        _pg_token["val"] = resp["token"]
+        _pg_token["exp"] = time.time() + 3300
+        log.info("lakebase token refreshed")
+    return _pg_token["val"]
+
+
+def pg_query(sql: str) -> list[dict[str, Any]]:
+    """Run a read-only query against Lakebase. Fresh connection per call with
+    one retry (connections go stale after scale-to-zero / token rotation)."""
+    last_err: Exception | None = None
+    for attempt in range(2):
+        try:
+            with psycopg.connect(
+                host=PGHOST, port=PGPORT, dbname=PGDATABASE, user=PGUSER,
+                password=_lakebase_token(), sslmode="require", connect_timeout=10,
+            ) as conn:
+                with conn.cursor() as cur:
+                    cur.execute(sql)
+                    cols = [d[0] for d in cur.description or []]
+                    return [dict(zip(cols, r)) for r in cur.fetchall()]
+        except Exception as e:
+            last_err = e
+            _pg_token["exp"] = 0.0  # force token refresh on retry
+            log.warning("lakebase query attempt %d failed: %s", attempt + 1, str(e)[:200])
+            time.sleep(1)
+    raise HTTPException(status_code=502, detail=f"Lakebase query failed: {str(last_err)[:200]}")
+
+
+def _pg_norm(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Normalize Postgres rows for the frontend: JSONB arrays (fault_codes)
+    become the same string shape the Delta path returned."""
+    for r in rows:
+        fc = r.get("fault_codes")
+        if isinstance(fc, (list, tuple)):
+            r["fault_codes"] = "[" + ", ".join(str(x) for x in fc) + "]" if fc else "[]"
+    return rows
 
 # ---------------------------------------------------------------- auth
 # Primary auth for ALL warehouse/Genie calls is the app's service principal
@@ -184,7 +245,12 @@ def send_work_order_alert(to_note: str, order: dict) -> None:
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "app": "sbr-fleet-copilot", "warehouse_id": WAREHOUSE_ID}
+    return {
+        "status": "ok",
+        "app": "sbr-fleet-copilot",
+        "warehouse_id": WAREHOUSE_ID,
+        "lakebase": {"host": PGHOST, "database": PGDATABASE, "schema": PG_SCHEMA},
+    }
 
 
 @app.get("/api/debug/auth")
@@ -202,12 +268,18 @@ def debug_auth(request: Request):
         except Exception:
             scope = "decode-failed"
     return {
-        "app_version": "2026-09-20.7-wofix",
+        "app_version": "2026-10-06.1-lakebase",
         "client_id_set": bool(os.environ.get("DATABRICKS_CLIENT_ID")),
         "host": os.environ.get("DATABRICKS_HOST", ""),
         "email": request.headers.get("x-forwarded-email"),
         "token_len": len(tok),
         "token_scope": scope,
+        "lakebase": {
+            "pg_host_set": bool(os.environ.get("PGHOST")),
+            "endpoint": PG_ENDPOINT,
+            "database": PGDATABASE,
+            "user_set": bool(PGUSER),
+        },
     }
 
 
@@ -219,65 +291,41 @@ def debug_auth(request: Request):
 def dashboard(x_forwarded_access_token: Optional[str] = Header(default=None)):
     t0 = time.time()
     payload: dict[str, Any] = {}
+    s = PG_SCHEMA
 
-    def run(key: str, sql: str):
-        payload[key] = sql_authed(x_forwarded_access_token, sql)
+    kpis = pg_query(f"""
+        SELECT
+          (SELECT COUNT(*) FROM {s}.gold_health_score WHERE health_risk_score >= 15) AS at_risk_count,
+          (SELECT COUNT(*) FROM {s}.gold_health_score WHERE health_risk_score >= 20) AS critical_count,
+          (SELECT COUNT(*) FROM {s}.work_orders WHERE status = 'OPEN') AS open_work_orders,
+          (SELECT COUNT(*) FROM {s}.work_orders WHERE status = 'PENDING_APPROVAL') AS pending_approvals,
+          (SELECT COUNT(*) FROM {s}.gold_machine_status) AS machines_reporting,
+          (SELECT ROUND(AVG(utilization_pct) * 100, 1) FROM {s}.gold_daily_agg
+             WHERE day >= (SELECT MAX(day) FROM {s}.gold_daily_agg) - INTERVAL '6 days') AS avg_utilization_7d
+        """)
+    payload["kpis"] = kpis[0] if kpis else {}
 
-    from concurrent.futures import ThreadPoolExecutor
-
-    with ThreadPoolExecutor(max_workers=5) as ex:
-        futs = {
-            "kpis": ex.submit(
-                run,
-                "kpis",
-                f"""
-                SELECT
-                  (SELECT COUNT(*) FROM {CATALOG}.{SCHEMA}.gold_health_score WHERE health_risk_score >= 15) AS at_risk_count,
-                  (SELECT COUNT(*) FROM {CATALOG}.{SCHEMA}.gold_health_score WHERE health_risk_score >= 20) AS critical_count,
-                  (SELECT COUNT(*) FROM {CATALOG}.{SCHEMA}.work_orders WHERE status = 'OPEN') AS open_work_orders,
-                  (SELECT COUNT(*) FROM {CATALOG}.{SCHEMA}.work_orders WHERE status = 'PENDING_APPROVAL') AS pending_approvals,
-                  (SELECT COUNT(*) FROM {CATALOG}.{SCHEMA}.gold_machine_status) AS machines_reporting,
-                  (SELECT ROUND(AVG(utilization_pct) * 100, 1) FROM {CATALOG}.{SCHEMA}.gold_daily_agg
-                     WHERE day >= (SELECT MAX(day) FROM {CATALOG}.{SCHEMA}.gold_daily_agg) - INTERVAL 6 DAYS) AS avg_utilization_7d
-                """,
-            ),
-            "trend": ex.submit(
-                run,
-                "utilization_trend",
-                f"SELECT equipment_class, day, ROUND(utilization_pct * 100, 1) AS utilization_pct, machines_reporting "
-                f"FROM {CATALOG}.{SCHEMA}.gold_daily_agg ORDER BY day",
-            ),
-            "risk": ex.submit(
-                run,
-                "at_risk",
-                f"""
-                SELECT h.equipment_id, h.equipment_class, h.health_risk_score, h.min_battery_running_7d,
-                       h.running_ratio_7d, h.fuel_anomalies_7d,
-                       s.fuel_level_pct, s.battery_voltage, s.fault_codes, s.engine_running
-                FROM {CATALOG}.{SCHEMA}.gold_health_score h
-                LEFT JOIN {CATALOG}.{SCHEMA}.gold_machine_status s ON h.equipment_id = s.equipment_id
-                WHERE h.health_risk_score > 0
-                ORDER BY h.health_risk_score DESC, h.equipment_id
-                """,
-            ),
-            "events": ex.submit(
-                run,
-                "events",
-                f"SELECT event_ts, equipment_id, equipment_class, event_type, metric_value, detail "
-                f"FROM {CATALOG}.{SCHEMA}.gold_events ORDER BY event_ts DESC, equipment_id LIMIT 25",
-            ),
-            "wos": ex.submit(
-                run,
-                "work_orders",
-                f"SELECT order_id, equipment_id, priority, status, notes, created_by, created_at "
-                f"FROM {CATALOG}.{SCHEMA}.work_orders ORDER BY created_at DESC LIMIT 25",
-            ),
-        }
-        # surface exceptions from any branch
-        for fut in futs.values():
-            fut.result()
-
-    payload["kpis"] = payload["kpis"][0] if payload.get("kpis") else {}
+    payload["utilization_trend"] = pg_query(
+        f"SELECT equipment_class, day, ROUND(utilization_pct * 100, 1) AS utilization_pct, machines_reporting "
+        f"FROM {s}.gold_daily_agg ORDER BY day"
+    )
+    payload["at_risk"] = _pg_norm(pg_query(f"""
+        SELECT h.equipment_id, h.equipment_class, h.health_risk_score, h.min_battery_running_7d,
+               h.running_ratio_7d, h.fuel_anomalies_7d,
+               s.fuel_level_pct, s.battery_voltage, s.fault_codes, s.engine_running
+        FROM {s}.gold_health_score h
+        LEFT JOIN {s}.gold_machine_status s ON h.equipment_id = s.equipment_id
+        WHERE h.health_risk_score > 0
+        ORDER BY h.health_risk_score DESC, h.equipment_id
+        """))
+    payload["events"] = pg_query(
+        f"SELECT event_ts, equipment_id, equipment_class, event_type, metric_value, detail "
+        f"FROM {s}.gold_events ORDER BY event_ts DESC, equipment_id LIMIT 25"
+    )
+    payload["work_orders"] = pg_query(
+        f"SELECT order_id, equipment_id, priority, status, notes, created_by, created_at "
+        f"FROM {s}.work_orders ORDER BY created_at DESC LIMIT 25"
+    )
 
     payload["generated_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     payload["elapsed_ms"] = int((time.time() - t0) * 1000)
@@ -289,16 +337,14 @@ def dashboard(x_forwarded_access_token: Optional[str] = Header(default=None)):
 
 @app.get("/api/fleet-map")
 def fleet_map(x_forwarded_access_token: Optional[str] = Header(default=None)):
-    rows = sql_authed(
-        x_forwarded_access_token,
-        f"""
+    s = PG_SCHEMA
+    rows = pg_query(f"""
         SELECT m.equipment_id, m.equipment_class, m.latitude, m.longitude,
                COALESCE(h.health_risk_score, 0) AS health_risk_score
-        FROM {CATALOG}.{SCHEMA}.gold_machine_status m
-        LEFT JOIN {CATALOG}.{SCHEMA}.gold_health_score h ON m.equipment_id = h.equipment_id
+        FROM {s}.gold_machine_status m
+        LEFT JOIN {s}.gold_health_score h ON m.equipment_id = h.equipment_id
         ORDER BY m.equipment_id
-        """,
-    )
+        """)
     return {"machines": rows}
 
 
@@ -307,16 +353,14 @@ def fleet_map(x_forwarded_access_token: Optional[str] = Header(default=None)):
 
 @app.get("/api/equipment")
 def equipment(x_forwarded_access_token: Optional[str] = Header(default=None)):
-    rows = sql_authed(
-        x_forwarded_access_token,
-        f"""
+    s = PG_SCHEMA
+    rows = pg_query(f"""
         SELECT m.equipment_id, m.equipment_class,
                COALESCE(h.health_risk_score, 0) AS health_risk_score
-        FROM {CATALOG}.{SCHEMA}.gold_machine_status m
-        LEFT JOIN {CATALOG}.{SCHEMA}.gold_health_score h ON m.equipment_id = h.equipment_id
+        FROM {s}.gold_machine_status m
+        LEFT JOIN {s}.gold_health_score h ON m.equipment_id = h.equipment_id
         ORDER BY health_risk_score DESC, m.equipment_id
-        """,
-    )
+        """)
     return {"equipment": rows}
 
 
