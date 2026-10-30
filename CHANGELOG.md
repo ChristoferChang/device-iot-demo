@@ -13,6 +13,10 @@ file write/edit) against the current tree — see Fidelity notes.
   At-Risk Machines table now shows an AI Analysis column (tier + maintenance suggestion)
   and includes machines the AI flags below-average even when the rule-based score is 0
   (153 rows: 3 rule-based + 150 AI-only)
+- Postgres fix: the app SP's `SELECT` grant does not extend to tables created by the
+  sync pipeline (default privileges only cover owner-created tables) — every new
+  synced table needs an explicit `GRANT SELECT ON ALL TABLES IN SCHEMA fleet`; applied
+  after `ai_triage` synced and the dashboard briefly 403'd
 
 ## 2026-10-06 — Lakebase migration (operational serving)
 - New `jobs/lakebase_serving_refresh.py`: 5-minute job materializing gold views
