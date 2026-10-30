@@ -32,6 +32,8 @@
     .t-sdp { background:rgba(0,133,69,0.14); color:var(--green); }
     .t-serve { background:rgba(28,28,28,0.08); color:var(--charcoal); }
     .t-hitl { background:rgba(210,59,18,0.1); color:#b23009; }
+    .t-lake { background:rgba(30,79,160,0.12); color:#1e4fa0; }
+    .t-ai { background:rgba(110,60,190,0.12); color:#5b2a9a; }
 
     .harrow { display:flex; flex-direction:column; justify-content:center; align-items:center; width:64px; flex:0 0 auto; }
     .harrow .line { width:100%; height:2px; background:#9a9a9a; position:relative; }
@@ -55,6 +57,10 @@
     .lane.group.serve .lane-label { color:var(--green); }
     .lane.group.iot { background:rgba(254,210,3,0.07); border-color:rgba(200,160,0,0.55); }
     .lane.group.iot .lane-label { color:#7a5c00; }
+    .lane.group.lake { background:rgba(30,79,160,0.03); border-color:rgba(30,79,160,0.5); }
+    .lane.group.lake .lane-label { color:#1e4fa0; }
+    .feed { position:relative; height:172px; }
+    .feed .vconn { position:absolute; margin:0; align-items:flex-start; }
 
     .flow { position:relative; }
     .foot { max-width:none; margin:0 auto; padding:4px 20px 10px; font-size:10.5px; color:var(--faint); line-height:1.5; }
@@ -106,7 +112,36 @@
         </div>
       </div>
 
-      <div class="vconn" style="margin-left:64px"><div class="vline"></div><em>governed reads — one catalog, four surfaces</em></div>
+      <div class="vconn" style="margin-left:64px"><div class="vline"></div><em>gold views materialized by a 5-min job</em></div>
+
+      <div class="lane group lake" style="--i:1">
+        <div class="lane-label">Lakebase serving — gold to Postgres</div>
+        <div class="node">
+          <span class="tag t-lake">Job · every 5 min</span>
+          <h3>serving refresh job</h3>
+          <p>sbr_iot_lakebase_serving_refresh<br/>materializes gold views</p>
+        </div>
+        <div class="harrow"><div class="line"></div><em>CDF</em></div>
+        <div class="node">
+          <span class="tag t-lake">Delta</span>
+          <h3>serving_* tables</h3>
+          <p>CDF-enabled Delta tables<br/>from gold views + work_orders</p>
+        </div>
+        <div class="harrow"><div class="line"></div><em>continuous sync</em></div>
+        <div class="node">
+          <span class="tag t-lake">Synced tables × 5</span>
+          <h3>synced tables</h3>
+          <p>machine_status · health_score<br/>daily_agg · events · work_orders</p>
+        </div>
+        <div class="harrow"><div class="line"></div><em>app reads</em></div>
+        <div class="node">
+          <span class="tag t-lake">Schema fleet</span>
+          <h3>Lakebase Postgres</h3>
+          <p>lakebase-demo-db<br/>app reads via psycopg</p>
+        </div>
+      </div>
+
+      <div class="vconn" style="margin-left:64px"><div class="vline"></div><em>app reads via psycopg · Genie, AI/BI, Teams stay on UC gold<br/>synced tables read-only — writes via UC procedures on Delta</em></div>
 
       <div class="lane group serve" style="--i:2">
         <div class="lane-label">Serving</div>
@@ -128,7 +163,7 @@
         <div class="node">
           <span class="tag t-serve">Apps</span>
           <h3>IoT Fleet Health Center</h3>
-          <p>dashboard · fleet map · chat<br/>SP reads · OBO Genie</p>
+          <p>dashboard · fleet map · chat<br/>reads Lakebase (psycopg)<br/>OBO Genie for chat</p>
         </div>
         <div class="node">
           <span class="tag t-serve">Copilot</span>
@@ -142,7 +177,15 @@
         </div>
       </div>
 
-      <div class="vconn red" style="margin-left:64px"><div class="vline"></div><em>Human or AI based recommendations — app form, Genie chat, or an agent</em></div>
+      <div class="feed">
+        <div class="vconn red" style="left:64px; top:0; height:172px;"><div class="vline" style="height:172px;"></div><em>Human or AI based recommendations — app form, Genie chat, or an agent</em></div>
+        <div class="node" style="position:absolute; left:80px; top:24px;">
+          <span class="tag t-ai">GenAI</span>
+          <h3>ai_classify triage</h3>
+          <p>metrics vs class averages → ai_triage<br/>flags below-average equipment</p>
+        </div>
+        <div class="vconn red" style="left:175px; top:122px; height:50px;"><div class="vline" style="height:50px;"></div><em>BELOW_AVERAGE tier → proposal</em></div>
+      </div>
 
       <div class="lane loop" style="--i:3">
         <div class="lane-label">The action loop — human-in-the-loop (Act 4)</div>
