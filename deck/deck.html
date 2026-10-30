@@ -262,7 +262,7 @@
     <div class="stage"><div class="t">1 &middot; Lakeflow ingest</div><div class="d">Serverless ingest job every 5 min; SDP with DQ guardrails quarantines bad rows</div></div>
     <div class="stage"><div class="t">2 &middot; Unity Catalog governance</div><div class="d">Catalog, HITL procedures, metric views and grants on one platform</div></div>
     <div class="stage"><div class="t">3 &middot; Lakebase serving</div><div class="d">Continuous synced tables; the app reads operational data from Postgres</div></div>
-    <div class="stage"><div class="t">4 &middot; GenAI</div><div class="d">ai_classify triage flags units for review; Genie answers questions over gold</div></div>
+    <div class="stage"><div class="t">4 &middot; GenAI</div><div class="d">ai_classify tiers all 300 machines vs class average; Genie answers over gold</div></div>
     <div class="stage"><div class="t">5 &middot; Fleet Copilot app</div><div class="d">Human-in-the-loop: AI or people propose, a human approves</div></div>
   </div>
   <span class="pagenum">6</span>
@@ -275,11 +275,11 @@
   <h1 class="head">AI finds and proposes. Governed data answers. A person decides.</h1>
   <ul class="b">
     <li><strong>Genie space over governed gold data</strong>: natural-language answers with certified answers and cited sources, so yard managers query without SQL.</li>
-    <li><strong>Work-order tool</strong> (<span class="code">create_work_order</span>): a Genie request can propose a work order, but it lands as pending approval, never as open.</li>
-    <li><strong>AI-functions triage</strong> (<span class="code">ai_classify</span>): flags equipment running below the fleet average for review.</li>
+    <li><strong>Genie work-order tool</strong> (<span class="code">create_work_order</span>): Genie can propose a work order, which lands as pending approval, never as open.</li>
+    <li><strong>AI-functions triage</strong> (<span class="code">ai_classify</span>): all 300 machines classified against their class average. 153 below average (51%), 74 at average (25%), 72 above (24%), 1 with no data.</li>
     <li><strong>AI proposes; a human approves.</strong> The model never opens a work order on its own.</li>
   </ul>
-  <div class="callout warn" style="margin-top:24px; font-size:15px;">Status: the ai_classify triage table is in progress. Confirm it is populated before the live demo.</div>
+  <p class="small" style="margin-top:22px;"><span class="tag measured">Measured</span> Source: <span class="code">sbr_iot_demo.fleet.ai_triage</span>, <span class="code">performance_tier</span>, query on fevm-azure, 2026-10-30. The no-data unit is from job run 666542468716283.</p>
   <span class="pagenum">7</span>
 </section>
 
@@ -289,7 +289,7 @@
   <div class="accent"></div>
   <h1 class="head">Every work order passes a human gate before anyone dispatches a truck</h1>
   <div class="steps">
-    <div class="step"><div class="n">1 &middot; Propose</div><h2>AI or a person</h2><p>From a telemetry alert, a triage flag or a Genie question. Row lands as PENDING_APPROVAL; proposer is audited.</p></div>
+    <div class="step"><div class="n">1 &middot; Propose</div><h2>AI or a person</h2><p>From a telemetry alert, a triage flag or a Genie question, via the <span class="code">propose_work_order</span> procedure. Row lands as PENDING_APPROVAL; proposer is audited.</p></div>
     <div class="step"><div class="n">2 &middot; Pending</div><h2>Waiting on a human</h2><p>Shown in the Copilot queue. The unit leaves the at-risk list while an active order exists, so no duplicate orders.</p></div>
     <div class="step"><div class="n">3 &middot; Approve</div><h2>Only a human</h2><p>Approving flips the order to OPEN. The approver is audited; the AI cannot take this step.</p></div>
     <div class="step"><div class="n">4 &middot; Dispatch</div><h2>Fix, then verify</h2><p>The fix is dispatched. Telemetry shows recovery, which closes the loop.</p></div>

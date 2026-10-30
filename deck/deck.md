@@ -106,12 +106,12 @@ One governed platform carries the journey from telemetry to work order.
 1. **Lakeflow ingest:** serverless ingest job every 5 min; SDP with DQ guardrails quarantines bad rows.
 2. **Unity Catalog governance:** catalog, HITL procedures, metric views and grants on one platform.
 3. **Lakebase serving:** continuous synced tables; the app reads operational data from Postgres.
-4. **GenAI:** ai_classify triage flags units for review; Genie answers questions over gold.
+4. **GenAI:** ai_classify triages all 300 machines against their class average; Genie answers questions over gold.
 5. **Fleet Copilot app:** human-in-the-loop; AI or people propose, a human approves.
 
 *Diagram: `architecture.png`.*
 
-Speaker notes: Walk left to right. Stress that the governed gold data is the single source for the app, Genie and the dashboard. Note that the diagram's step names may differ slightly from the function names used on slide 7 (propose_work_order in the diagram vs create_work_order in the Genie tool). Confirm the name before the live demo.
+Speaker notes: Walk left to right. Stress that the governed gold data is the single source for the app, Genie and the dashboard. Naming: the diagram's propose_work_order is the Unity Catalog SQL procedure the app's propose path calls; create_work_order is the Genie tool function (slide 7). Both are correct in their own context.
 
 ---
 
@@ -120,13 +120,13 @@ Speaker notes: Walk left to right. Stress that the governed gold data is the sin
 AI finds and proposes. Governed data answers. A person decides.
 
 - **Genie space over governed gold data:** natural-language answers with certified answers and cited sources, so yard managers query without SQL.
-- **Work-order tool** (`create_work_order`): a Genie request can propose a work order, but it lands as pending approval, never as open.
-- **AI-functions triage** (`ai_classify`): flags equipment running below the fleet average for review.
+- **Genie work-order tool** (`create_work_order`): Genie can propose a work order, which lands as pending approval, never as open.
+- **AI-functions triage** (`ai_classify`): all 300 machines classified against their class average. 153 below average (51%), 74 at average (25%), 72 above (24%), 1 with no data.
 - **AI proposes; a human approves.** The model never opens a work order on its own.
 
-*Status: the ai_classify triage table is in progress. Confirm it is populated before the live demo.*
+*Measured: `sbr_iot_demo.fleet.ai_triage` (`performance_tier`), query on fevm-azure, 2026-10-30. The no-data unit is from job run 666542468716283 (about 3 min, 299 ai_classify calls).*
 
-Speaker notes: Be explicit that the triage is a flag for review, not an automatic action.
+Speaker notes: The triage tiers are a review aid, not an automatic action. A tier of BELOW_AVERAGE is a reason for a person to look, not a work order. Naming: `create_work_order` is the Genie tool; the app's propose path calls the `propose_work_order` procedure. Both are correct in their context.
 
 ---
 
@@ -134,7 +134,7 @@ Speaker notes: Be explicit that the triage is a flag for review, not an automati
 
 Every work order passes a human gate before anyone dispatches a truck.
 
-1. **Propose:** AI or a person, from a telemetry alert, a triage flag or a Genie question. Row lands as PENDING_APPROVAL; proposer is audited.
+1. **Propose:** AI or a person, from a telemetry alert, a triage flag or a Genie question, via the `propose_work_order` procedure. Row lands as PENDING_APPROVAL; proposer is audited.
 2. **Pending:** shown in the Copilot queue. The unit leaves the at-risk list while an active order exists, so there are no duplicate orders.
 3. **Approve:** only a human. Approving flips the order to OPEN; the approver is audited.
 4. **Dispatch:** the fix is dispatched; telemetry shows recovery, which closes the loop.
