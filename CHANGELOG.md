@@ -38,9 +38,9 @@ file write/edit) against the current tree — see Fidelity notes.
 - Ingest deploy notebooks (live + backfill)
 
 ## 2026-09-19 — Initial build
-- Synthetic fleet simulator (`simulator/fleet_sim.py`): 75 machines across 6 classes,
-  deterministic per-tick telemetry, scripted narratives (battery decay, fuel anomaly,
-  service-due, idle-on-rent)
+- Synthetic fleet simulator (`simulator/fleet_sim.py`): 300 machines across 4
+  equipment classes (75 each), deterministic per-tick telemetry, scripted
+  narratives (battery decay, fuel anomaly, service-due, idle-on-rent)
 - Lakeflow SDP pipeline: bronze → silver (dedupe + DQ guardrails) → gold
 - Unity Catalog governance: HITL work-order procedures, metric views
 - Fleet Copilot app scaffold + AI/BI dashboard
