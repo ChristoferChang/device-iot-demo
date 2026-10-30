@@ -103,6 +103,32 @@ def _pg_norm(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
             r["fault_codes"] = "[" + ", ".join(str(x) for x in fc) + "]" if fc else "[]"
     return rows
 
+
+def _ai_suggestion(r: dict[str, Any]) -> str:
+    """One-line maintenance suggestion derived from the ai_classify triage
+    deltas (deterministic — no extra LLM calls at request time)."""
+    tier = r.get("ai_tier")
+    if not tier or tier == "NO_DATA":
+        return "No recent telemetry — check device reporting"
+    if tier == "AT_AVERAGE":
+        return "Performing at class average — no action needed"
+    if tier == "ABOVE_AVERAGE":
+        return "Performing above class average — healthy"
+
+    drivers = []
+    if (r.get("fuel_anomalies_delta") or 0) > 0:
+        drivers.append("fuel anomalies above class average — inspect for leaks")
+    if (r.get("min_battery_delta") or 0) < -0.2:
+        drivers.append("battery below class average — schedule electrical check")
+    if (r.get("running_ratio_delta") or 0) < -0.1:
+        drivers.append("running ratio well below class average — review utilization")
+    if (r.get("fault_code_delta") or 0) > 0 or (r.get("fault_code_count") or 0) > 0:
+        drivers.append("active fault codes — run diagnostics")
+    if (r.get("engine_hours_delta") or 0) > 50:
+        drivers.append("engine hours above class average — service due soon")
+    text = "; ".join(drivers[:2]) if drivers else "metrics below class average"
+    return f"Below class average — {text}"
+
 # ---------------------------------------------------------------- auth
 # Primary auth for ALL warehouse/Genie calls is the app's service principal
 # (Databricks Apps injects DATABRICKS_CLIENT_ID / DATABRICKS_CLIENT_SECRET).
@@ -312,12 +338,20 @@ def dashboard(x_forwarded_access_token: Optional[str] = Header(default=None)):
     payload["at_risk"] = _pg_norm(pg_query(f"""
         SELECT h.equipment_id, h.equipment_class, h.health_risk_score, h.min_battery_running_7d,
                h.running_ratio_7d, h.fuel_anomalies_7d,
-               s.fuel_level_pct, s.battery_voltage, s.fault_codes, s.engine_running
+               s.fuel_level_pct, s.battery_voltage, s.fault_codes, s.engine_running,
+               t.performance_tier, t.running_ratio_delta, t.min_battery_delta,
+               t.fuel_anomalies_delta, t.engine_hours_delta, t.fault_code_delta,
+               t.fault_code_count, t.classified_at
         FROM {s}.gold_health_score h
         LEFT JOIN {s}.gold_machine_status s ON h.equipment_id = s.equipment_id
-        WHERE h.health_risk_score > 0
+        LEFT JOIN {s}.ai_triage t ON h.equipment_id = t.equipment_id
+        WHERE h.health_risk_score > 0 OR t.performance_tier = 'BELOW_AVERAGE'
         ORDER BY h.health_risk_score DESC, h.equipment_id
         """))
+    for r in payload["at_risk"]:
+        r["ai_tier"] = r.pop("performance_tier", None)
+        r["ai_as_of"] = r.pop("classified_at", None)
+        r["ai_suggestion"] = _ai_suggestion(r)
     payload["events"] = pg_query(
         f"SELECT event_ts, equipment_id, equipment_class, event_type, metric_value, detail "
         f"FROM {s}.gold_events ORDER BY event_ts DESC, equipment_id LIMIT 25"

@@ -7,6 +7,12 @@ file write/edit) against the current tree — see Fidelity notes.
 ## 2026-10-30 — Submission prep
 - Sync `app/requirements.txt` with the deployed app (adds `psycopg[binary]` for Lakebase)
 - Add this CHANGELOG and repo hygiene (`.gitignore`)
+- Sunbelt branding removed across repo, app, and workspace copies
+- **AI Analysis in the app**: `ai_triage` synced into Lakebase (6th synced table, CDF),
+  triage notebook switched to INSERT OVERWRITE (sync-safe) and scheduled daily 06:00 UTC;
+  At-Risk Machines table now shows an AI Analysis column (tier + maintenance suggestion)
+  and includes machines the AI flags below-average even when the rule-based score is 0
+  (153 rows: 3 rule-based + 150 AI-only)
 
 ## 2026-10-06 — Lakebase migration (operational serving)
 - New `jobs/lakebase_serving_refresh.py`: 5-minute job materializing gold views

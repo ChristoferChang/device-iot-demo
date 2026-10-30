@@ -3,8 +3,9 @@
 #
 # For every machine in sbr_iot_demo.fleet.gold_machine_status it builds a compact
 # performance summary (7-day metrics vs equipment-class averages, with explicit
-# numeric deltas), sends that text to ai_classify, and persists the result to the
-# NEW table sbr_iot_demo.fleet.ai_triage (CREATE OR REPLACE on that table only).
+# numeric deltas), sends that text to ai_classify, and persists the result to
+# sbr_iot_demo.fleet.ai_triage via INSERT OVERWRITE — the table identity is
+# preserved so its CDF feed and Lakebase synced table stay valid across runs.
 #
 # Sources (read-only): gold_machine_status, gold_health_score, gold_daily_agg,
 # silver_telemetry (for the 7-day anchor). Nothing else is modified.
@@ -16,8 +17,43 @@ CATALOG = "sbr_iot_demo"
 SCHEMA = "fleet"
 TARGET = f"{CATALOG}.{SCHEMA}.ai_triage"
 
+# Sync-safe write: the table is created once (IF NOT EXISTS) and every run
+# INSERT OVERWRITEs all rows, keeping the Delta table identity stable.
+spark.sql(f"""
+CREATE TABLE IF NOT EXISTS {TARGET} (
+  equipment_id STRING,
+  equipment_class STRING,
+  running_ratio_7d DOUBLE,
+  class_avg_running_ratio_7d DOUBLE,
+  running_ratio_delta DOUBLE,
+  fuel_anomalies_7d DOUBLE,
+  class_avg_fuel_anomalies_7d DOUBLE,
+  fuel_anomalies_delta DOUBLE,
+  min_battery_running_7d DOUBLE,
+  class_avg_min_battery_running_7d DOUBLE,
+  min_battery_delta DOUBLE,
+  engine_hours_latest DOUBLE,
+  class_avg_engine_hours DOUBLE,
+  engine_hours_delta DOUBLE,
+  fuel_level_pct DOUBLE,
+  class_avg_fuel_level_pct DOUBLE,
+  fuel_level_delta DOUBLE,
+  battery_voltage DOUBLE,
+  class_avg_battery_voltage DOUBLE,
+  battery_delta DOUBLE,
+  fault_code_count DOUBLE,
+  class_avg_fault_code_count DOUBLE,
+  fault_code_delta DOUBLE,
+  fault_codes STRING,
+  performance_summary STRING,
+  performance_tier STRING,
+  model_name STRING,
+  classified_at TIMESTAMP
+) USING DELTA
+""")
+
 ai_triage_sql = r"""
-CREATE OR REPLACE TABLE sbr_iot_demo.fleet.ai_triage AS
+INSERT OVERWRITE sbr_iot_demo.fleet.ai_triage
 WITH anchor AS (
   SELECT MAX(snapshot_ts) AS now_ts FROM sbr_iot_demo.fleet.silver_telemetry
 ),

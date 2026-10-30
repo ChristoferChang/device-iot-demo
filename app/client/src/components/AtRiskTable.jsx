@@ -5,6 +5,24 @@ function severity(score) {
   return { label: "WATCH", cls: "sev-watch" };
 }
 
+function aiTier(tier) {
+  if (tier === "BELOW_AVERAGE") return { label: "BELOW AVG", cls: "ai-below" };
+  if (tier === "ABOVE_AVERAGE") return { label: "ABOVE AVG", cls: "ai-above" };
+  if (tier === "AT_AVERAGE") return { label: "AT AVG", cls: "ai-at" };
+  return { label: "NO DATA", cls: "ai-nodata" };
+}
+
+export function AiAnalysis({ row }) {
+  const t = aiTier(row.ai_tier);
+  const asOf = row.ai_as_of ? new Date(row.ai_as_of).toLocaleString() : "";
+  return (
+    <div className="ai-cell" title={asOf ? `Classified ${asOf}` : ""}>
+      <span className={`badge ${t.cls}`}>{t.label}</span>
+      <span className="ai-suggestion">{row.ai_suggestion || "—"}</span>
+    </div>
+  );
+}
+
 export function SeverityBadge({ score }) {
   const sev = severity(score);
   return <span className={`badge ${sev.cls}`}>{sev.label}</span>;
@@ -15,7 +33,7 @@ export default function AtRiskTable({ rows, onPropose }) {
     <div className="card">
       <div className="card-head">
         <h3>At-Risk Machines</h3>
-        <span className="card-sub">health risk score &gt; 0, last 7 days</span>
+        <span className="card-sub">rule-based score &gt; 0 or AI-flagged below average, last 7 days</span>
       </div>
       <table className="table">
         <thead>
@@ -29,12 +47,13 @@ export default function AtRiskTable({ rows, onPropose }) {
             <th>Fuel %</th>
             <th>Battery V</th>
             <th>Faults</th>
+            <th>AI Analysis</th>
             <th></th>
           </tr>
         </thead>
         <tbody>
           {rows.map((r) => (
-            <tr key={r.equipment_id}>
+            <tr key={r.equipment_id} className={Number(r.health_risk_score) === 0 ? "ai-only" : ""}>
               <td className="mono strong">{r.equipment_id}</td>
               <td className="dim">{String(r.equipment_class).replace("_", " ")}</td>
               <td>
@@ -49,6 +68,9 @@ export default function AtRiskTable({ rows, onPropose }) {
               </td>
               <td className="mono dim">{r.fault_codes && r.fault_codes !== "[]" ? r.fault_codes : "—"}</td>
               <td>
+                <AiAnalysis row={r} />
+              </td>
+              <td>
                 <button className="btn btn-ghost" onClick={() => onPropose(r.equipment_id)}>
                   Propose WO
                 </button>
@@ -57,7 +79,7 @@ export default function AtRiskTable({ rows, onPropose }) {
           ))}
           {rows.length === 0 && (
             <tr>
-              <td colSpan={10} className="dim center">
+              <td colSpan={11} className="dim center">
                 No at-risk machines — fleet healthy.
               </td>
             </tr>
