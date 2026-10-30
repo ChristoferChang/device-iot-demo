@@ -79,7 +79,6 @@ export default function App() {
     <div>
       <header className="topbar">
         <div className="brand">
-          <img src="/logo.svg" alt="Sunbelt Rentals" className="brand-logo" />
           <h1>IoT Fleet Health Center</h1>
         </div>
         <div className="topbar-right">

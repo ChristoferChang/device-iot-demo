@@ -44,8 +44,7 @@ body {
   background: var(--bg-elev); border-bottom: 4px solid var(--green);
   box-shadow: 0 2px 10px rgba(28, 28, 28, 0.07);
 }
-.brand { display: flex; align-items: center; gap: 16px; }
-.brand-logo { display: block; height: 38px; width: auto; }
+.brand { display: flex; align-items: center; }
 .brand h1 { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -0.2px; line-height: 1; color: var(--charcoal); }
 .topbar-right { display: flex; align-items: center; gap: 10px; }
 .refresh-note { font-size: 12px; color: var(--text-faint); margin-right: 4px; font-variant-numeric: tabular-nums; }
