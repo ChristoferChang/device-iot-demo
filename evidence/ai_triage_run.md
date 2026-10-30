@@ -1,10 +1,52 @@
 # ai_triage run log
 
-Feature: `ai_classify`-based performance triage for the equipment-rental IoT fleet.
+Feature: GenAI performance triage for the equipment-rental IoT fleet — two foundation-model
+calls per machine via Databricks AI Functions run in SQL: `ai_classify` (BELOW_AVERAGE /
+AT_AVERAGE / ABOVE_AVERAGE tier) and `ai_gen` (a concise maintenance `recommended_action`
+written from the same telemetry-vs-class-average comparison).
 Output table: `sbr_iot_demo.fleet.ai_triage` (NEW table; no existing table, view, job or pipeline was modified).
 Workspace: fevm-azure (`adb-7405615395376229.9.azuredatabricks.net`). Warehouse `d0163299fb00cd64` (validation queries only).
 
-## Run 2 — current notebook version (INSERT OVERWRITE), post Lakebase sync
+## Run 3 — current notebook version (ai_classify + ai_gen recommended actions)
+
+Adds the `recommended_action` column, generated per machine by `ai_gen` from the
+telemetry-vs-class-average summary (max 25 words, imperative, no preamble). The
+column was added to the live table with `ALTER TABLE ... ADD COLUMN` (identity and
+CDF preserved); the Lakebase synced table evolved the schema automatically.
+
+| Item | Value |
+|---|---|
+| Job name | `sbr_iot_demo_ai_triage` |
+| Job ID | `1062733724985487` |
+| Run ID | `101147775045264` |
+| Run start (UTC) | 2026-10-30 17:18:16 |
+| Run finish (UTC) | 2026-10-30 17:21:58 |
+| Duration | ~222 s |
+| Result | `TERMINATED` / `SUCCESS` |
+| Lakebase sync after run | `fleet.ai_triage` in Postgres includes `recommended_action`, populated |
+
+Tier distribution this run:
+
+| Tier | Machines |
+|---|---:|
+| BELOW_AVERAGE | 162 |
+| AT_AVERAGE | 69 |
+| ABOVE_AVERAGE | 68 |
+| NO_DATA | 1 (GEN-0042) |
+
+Sample model-written recommended actions (BELOW_AVERAGE machines):
+
+| Equipment | Recommended action (verbatim from `ai_gen`) |
+|---|---|
+| CMP-0005 | Inspect and address SVC_DUE fault code on CMP-0005. |
+| CMP-0012 | Check battery and charging system on CMP-0012. |
+| CMP-0018 | Check and address low running ratio on CMP-0018. |
+| CMP-0020 | Inspect CMP-0020's electrical system and battery. |
+
+The app's AI Analysis column displays these model-written actions; the deterministic
+delta-based suggestion remains as a fallback when the model returns nothing.
+
+## Run 2 — INSERT OVERWRITE notebook, post Lakebase sync
 
 The notebook was changed from `CREATE OR REPLACE TABLE ... AS SELECT` to
 `CREATE TABLE IF NOT EXISTS` + `INSERT OVERWRITE` so the Delta table identity — and

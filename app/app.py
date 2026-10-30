@@ -341,7 +341,7 @@ def dashboard(x_forwarded_access_token: Optional[str] = Header(default=None)):
                s.fuel_level_pct, s.battery_voltage, s.fault_codes, s.engine_running,
                t.performance_tier, t.running_ratio_delta, t.min_battery_delta,
                t.fuel_anomalies_delta, t.engine_hours_delta, t.fault_code_delta,
-               t.fault_code_count, t.classified_at
+               t.fault_code_count, t.classified_at, t.recommended_action
         FROM {s}.gold_health_score h
         LEFT JOIN {s}.gold_machine_status s ON h.equipment_id = s.equipment_id
         LEFT JOIN {s}.ai_triage t ON h.equipment_id = t.equipment_id
@@ -351,7 +351,9 @@ def dashboard(x_forwarded_access_token: Optional[str] = Header(default=None)):
     for r in payload["at_risk"]:
         r["ai_tier"] = r.pop("performance_tier", None)
         r["ai_as_of"] = r.pop("classified_at", None)
-        r["ai_suggestion"] = _ai_suggestion(r)
+        # Prefer the model-written recommendation (ai_gen); fall back to the
+        # deterministic delta-based suggestion when the model returned nothing.
+        r["ai_suggestion"] = r.pop("recommended_action", None) or _ai_suggestion(r)
     payload["events"] = pg_query(
         f"SELECT event_ts, equipment_id, equipment_class, event_type, metric_value, detail "
         f"FROM {s}.gold_events ORDER BY event_ts DESC, equipment_id LIMIT 25"

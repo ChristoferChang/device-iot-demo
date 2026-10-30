@@ -13,6 +13,10 @@ file write/edit) against the current tree — see Fidelity notes.
   At-Risk Machines table now shows an AI Analysis column (tier + maintenance suggestion)
   and includes machines the AI flags below-average even when the rule-based score is 0
   (153 rows: 3 rule-based + 150 AI-only)
+- Triage upgraded to two GenAI calls per machine: `ai_classify` tiers the machine and
+  `ai_gen` writes a maintenance `recommended_action` from the same telemetry comparison;
+  column synced to Lakebase (auto schema evolution), shown in the app's AI Analysis
+  column, deterministic suggestion kept as fallback
 - Postgres fix: the app SP's `SELECT` grant does not extend to tables created by the
   sync pipeline (default privileges only cover owner-created tables) — every new
   synced table needs an explicit `GRANT SELECT ON ALL TABLES IN SCHEMA fleet`; applied

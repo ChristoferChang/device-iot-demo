@@ -1,17 +1,24 @@
 # Databricks notebook source
-# ai_classify-based performance triage for the equipment-rental IoT fleet.
+# GenAI performance triage for the equipment-rental IoT fleet.
+#
+# Two foundation-model calls per machine (Databricks AI Functions, run in SQL):
+#   1. ai_classify  — labels the machine BELOW_AVERAGE / AT_AVERAGE / ABOVE_AVERAGE
+#                     against its own equipment class (7-day metrics vs class averages).
+#   2. ai_gen       — writes a concise maintenance recommended_action for the crew
+#                     from the same comparison text.
 #
 # For every machine in sbr_iot_demo.fleet.gold_machine_status it builds a compact
-# performance summary (7-day metrics vs equipment-class averages, with explicit
-# numeric deltas), sends that text to ai_classify, and persists the result to
-# sbr_iot_demo.fleet.ai_triage via INSERT OVERWRITE — the table identity is
-# preserved so its CDF feed and Lakebase synced table stay valid across runs.
+# performance summary (with explicit numeric deltas), sends that text to both
+# functions, and persists the result to sbr_iot_demo.fleet.ai_triage via
+# INSERT OVERWRITE — the table identity is preserved so its CDF feed and the
+# Lakebase synced table stay valid across runs.
 #
 # Sources (read-only): gold_machine_status, gold_health_score, gold_daily_agg,
 # silver_telemetry (for the 7-day anchor). Nothing else is modified.
 #
 # Machines with no telemetry in the 7-day window (the gold_health_score window)
-# are written with performance_tier = 'NO_DATA' and do not trigger an ai_classify call.
+# are written with performance_tier = 'NO_DATA', a static recommended_action,
+# and do not trigger model calls.
 
 CATALOG = "sbr_iot_demo"
 SCHEMA = "fleet"
@@ -48,7 +55,8 @@ CREATE TABLE IF NOT EXISTS {TARGET} (
   performance_summary STRING,
   performance_tier STRING,
   model_name STRING,
-  classified_at TIMESTAMP
+  classified_at TIMESTAMP,
+  recommended_action STRING
 ) USING DELTA
 """)
 
@@ -143,7 +151,16 @@ SELECT p.equipment_id, p.equipment_class,
        CASE WHEN p.running_ratio_7d IS NULL THEN 'NO_DATA'
             ELSE ai_classify(p.performance_summary, array('BELOW_AVERAGE','AT_AVERAGE','ABOVE_AVERAGE')) END AS performance_tier,
        CASE WHEN p.running_ratio_7d IS NULL THEN NULL ELSE 'ai_classify (Databricks-hosted default)' END AS model_name,
-       current_timestamp() AS classified_at
+       current_timestamp() AS classified_at,
+       CASE WHEN p.running_ratio_7d IS NULL THEN
+         'No recent telemetry — check that the device is reporting before scheduling work.'
+       ELSE
+         ai_gen(concat(
+           'You are a fleet maintenance advisor for an equipment-rental company. ',
+           'Based on this 7-day telemetry comparison for the machine, write ONE concise ',
+           'recommended action for the maintenance crew (max 25 words, imperative, no preamble):\n',
+           p.performance_summary))
+       END AS recommended_action
 FROM prompted p
 
 """
