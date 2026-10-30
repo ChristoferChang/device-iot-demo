@@ -1,5 +1,5 @@
 :root {
-  /* Sunbelt Rentals brand palette (extracted from sunbeltrentals.com CSS) */
+  /* Brand palette: yellow / charcoal / green */
   --bg: #f6f7f8;
   --bg-elev: #ffffff;
   --bg-card: #ffffff;
@@ -10,10 +10,10 @@
   --text: #1c1c1c;
   --text-dim: #494949;
   --text-faint: #737373;
-  --accent: #fed203;       /* Sunbelt yellow */
+  --accent: #fed203;       /* brand yellow */
   --accent-hover: #f3a800; /* darker amber */
   --accent-soft: rgba(254, 210, 3, 0.22);
-  --green: #008545;        /* Sunbelt CTA green */
+  --green: #008545;        /* brand CTA green */
   --amber: #e08700;
   --red: #d23b12;
   --blue: #007378;

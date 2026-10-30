@@ -1,4 +1,4 @@
-# Sunbelt Fleet Copilot (sbr-fleet-copilot)
+# Fleet Copilot (sbr-fleet-copilot)
 
 Databricks App: FastAPI + React (Vite), single process on `$DATABRICKS_APP_PORT`.
 

@@ -1,4 +1,4 @@
-"""Deterministic Sunbelt-style fleet telemetry simulator.
+"""Deterministic equipment-rental fleet telemetry simulator.
 
 Readings are a pure function of (machine, tick_ts): same inputs -> same rows.
 All tick timestamps are aligned to 5-minute boundaries so retried/backfilled

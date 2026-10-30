@@ -24,7 +24,7 @@ function riskColor(score) {
   const s = Number(score) || 0;
   if (s >= 20) return "#d23b12"; // red — critical
   if (s > 0) return "#e08700";   // amber — at-risk
-  return "#008545";              // Sunbelt green — healthy
+  return "#008545";              // brand green — healthy
 }
 
 export default function MapCard() {

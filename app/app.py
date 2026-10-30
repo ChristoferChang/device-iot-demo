@@ -1,4 +1,4 @@
-"""Sunbelt Fleet Copilot — Databricks App backend (FastAPI).
+"""Fleet Copilot — Databricks App backend (FastAPI).
 
 Serves the built React frontend from client/dist and the /api routes
 from a single process bound to 0.0.0.0:$DATABRICKS_APP_PORT.
@@ -27,7 +27,7 @@ log = logging.getLogger("fleet-copilot")
 from databricks.sdk import WorkspaceClient
 from databricks.sdk.service.sql import Format, StatementState
 
-app = FastAPI(title="Sunbelt Fleet Copilot")
+app = FastAPI(title="Fleet Copilot")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],

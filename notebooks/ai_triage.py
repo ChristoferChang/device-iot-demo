@@ -1,5 +1,5 @@
 # Databricks notebook source
-# ai_classify-based performance triage for the Sunbelt Rentals IoT fleet.
+# ai_classify-based performance triage for the equipment-rental IoT fleet.
 #
 # For every machine in sbr_iot_demo.fleet.gold_machine_status it builds a compact
 # performance summary (7-day metrics vs equipment-class averages, with explicit

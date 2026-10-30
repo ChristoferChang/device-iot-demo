@@ -30,7 +30,7 @@ file write/edit) against the current tree — see Fidelity notes.
 
 ## 2026-09-20 — Fleet Copilot app + fleet relocation
 - Fleet Copilot app (FastAPI + React): exec KPIs, utilization chart, at-risk table,
-  work-order history, Genie chat panel, Sunbelt Rentals branding
+  work-order history, Genie chat panel, brand styling
 - Genie chat hardening: async start/poll (Apps gateway 504 workaround),
   OBO-first auth with service-principal fallback
 - Fleet relocated to 12 Charlotte NC/SC yards; GPS data-quality guardrail extended

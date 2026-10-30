@@ -1,6 +1,6 @@
 # ai_triage run log
 
-Feature: `ai_classify`-based performance triage for the Sunbelt Rentals IoT fleet.
+Feature: `ai_classify`-based performance triage for the equipment-rental IoT fleet.
 Output table: `sbr_iot_demo.fleet.ai_triage` (NEW table; no existing table, view, job or pipeline was modified).
 Workspace: fevm-azure (`adb-7405615395376229.9.azuredatabricks.net`). Warehouse `d0163299fb00cd64` (validation queries only).
 
