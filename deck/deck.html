@@ -1,0 +1,390 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Migrating your IoT Platform to Databricks — Signal to Action</title>
+<style>
+  @page { size: 1280px 720px; margin: 0; }
+  :root { --charcoal:#1c1c1c; --grey:#494949; --faint:#737373; --line:#d6d6d6; --yellow:#fed203; --green:#008545; --white:#ffffff; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: #7a7a7a; }
+  body { font-family: Roboto, "Helvetica Neue", Helvetica, Arial, sans-serif; color: var(--charcoal); -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+  .slide {
+    width: 1280px; height: 720px; position: relative; overflow: hidden;
+    background: var(--white); padding: 56px 72px; margin: 0 auto 24px;
+    page-break-after: always; break-after: page;
+  }
+  .slide:last-child { page-break-after: auto; break-after: auto; margin-bottom: 0; }
+  .slide.dark { background: var(--charcoal); color: var(--white); }
+
+  .eyebrow { font-size: 13px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--green); margin: 0 0 10px; }
+  .dark .eyebrow { color: var(--yellow); }
+  .accent { width: 88px; height: 6px; background: var(--yellow); margin: 0 0 22px; }
+  h1.head { font-size: 36px; line-height: 1.18; font-weight: 700; margin: 0 0 28px; letter-spacing: -.01em; max-width: 1136px; }
+  h2 { font-size: 20px; margin: 0 0 12px; font-weight: 700; }
+  p, li { font-size: 20px; line-height: 1.4; }
+  ul.b { margin: 0; padding-left: 24px; }
+  ul.b li { margin-bottom: 12px; }
+  .small { font-size: 14px; color: var(--faint); line-height: 1.4; }
+  .dark .small { color: #bdbdbd; }
+
+  .pagenum { position: absolute; right: 40px; bottom: 16px; font-size: 12px; color: var(--faint); }
+  .dark .pagenum { color: #9a9a9a; }
+  .source { position: absolute; left: 72px; right: 72px; bottom: 16px; font-size: 12px; color: var(--faint); line-height: 1.35; }
+
+  .tag { display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; padding: 4px 9px; border-radius: 4px; background: var(--yellow); color: var(--charcoal); vertical-align: middle; margin-right: 6px; }
+  .tag.measured { background: var(--green); color: var(--white); }
+  .tag.derived { background: var(--grey); color: var(--white); }
+  .tag.illus { background: var(--white); color: var(--charcoal); border: 2px solid var(--charcoal); padding: 2px 7px; }
+
+  table { border-collapse: collapse; width: 100%; font-size: 17px; }
+  th { background: var(--charcoal); color: var(--white); text-align: left; padding: 10px 12px; font-weight: 700; font-size: 14px; letter-spacing: .03em; }
+  td { padding: 11px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  tr.total td { font-weight: 700; border-top: 2px solid var(--charcoal); border-bottom: none; background: #fff8cc; }
+  td.code { font-family: Menlo, Consolas, monospace; font-size: 13px; color: var(--grey); }
+
+  .callout { background: #f6f7f8; border-left: 6px solid var(--green); padding: 14px 18px; font-size: 16px; line-height: 1.4; }
+  .callout.warn { border-left-color: var(--yellow); }
+
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; }
+  .card { border: 1px solid var(--line); border-radius: 10px; padding: 18px 20px; background: var(--white); }
+  .card.yellow { border-top: 6px solid var(--yellow); }
+  .card.green { border-top: 6px solid var(--green); }
+  .card.charcoal { border-top: 6px solid var(--charcoal); }
+
+  .kpis { display: grid; grid-template-columns: repeat(2, 1fr); gap: 22px; }
+  .kpi { border: 1px solid var(--line); border-radius: 10px; padding: 20px 22px; border-left: 8px solid var(--green); }
+  .kpi.ill { border-left-color: var(--charcoal); border-style: solid; }
+  .kpi .big { font-size: 48px; font-weight: 700; line-height: 1.05; margin: 8px 0 6px; font-variant-numeric: tabular-nums; }
+  .kpi .lbl { font-size: 17px; font-weight: 700; margin-bottom: 4px; }
+  .kpi .src { font-size: 13px; color: var(--faint); line-height: 1.35; }
+
+  .steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-top: 8px; }
+  .step { border: 1px solid var(--line); border-radius: 10px; padding: 18px; border-top: 6px solid var(--yellow); }
+  .step .n { font-size: 13px; font-weight: 700; color: var(--green); letter-spacing: .08em; text-transform: uppercase; }
+  .step h2 { font-size: 22px; margin: 6px 0 10px; }
+  .step p { font-size: 16px; margin: 0; }
+  .arrow { color: var(--charcoal); font-size: 22px; font-weight: 700; }
+
+  .stages { position: absolute; left: 72px; right: 72px; top: 602px; display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
+  .stage { border: 1px solid var(--line); border-top: 5px solid var(--yellow); border-radius: 8px; padding: 9px 11px; }
+  .stage:nth-child(5) { border-top-color: var(--green); }
+  .stage .t { font-size: 14px; font-weight: 700; line-height: 1.2; margin-bottom: 4px; }
+  .stage .d { font-size: 12.5px; color: var(--grey); line-height: 1.3; }
+  .archwrap { position: absolute; left: 110px; top: 108px; width: 1060px; height: 480px; overflow: hidden; }
+  .archwrap img { width: 1060px; display: block; margin-top: -272px; }
+
+  .sun { display: inline-block; width: 14px; height: 14px; background: var(--yellow); border-radius: 2px; margin-right: 8px; vertical-align: -1px; }
+</style>
+</head>
+<body>
+
+<!-- 1. Title -->
+<section class="slide dark">
+  <p class="eyebrow">Signal to Action &middot; equipment-rental IoT fleet-health proof of concept</p>
+  <div class="accent"></div>
+  <h1 class="head" style="font-size:56px; line-height:1.1; margin-top:40px; max-width:1100px;">Migrating your IoT Platform to Databricks</h1>
+  <p style="font-size:26px; line-height:1.35; max-width:1000px; margin:0 0 40px; color:#e8e8e8;">Catch failing equipment before your renters do &mdash; at a cost that doesn&rsquo;t scale with your fleet.</p>
+  <p class="small" style="font-size:16px; position:absolute; left:72px; bottom:56px; margin:0;">FE Bar submission &middot; Demo data is a synthetic 300-machine fleet &middot; Figures are measured from Databricks system tables unless labeled illustrative</p>
+  <span class="pagenum">1</span>
+</section>
+
+<!-- 2. Customer problem -->
+<section class="slide">
+  <p class="eyebrow">The customer problem</p>
+  <div class="accent"></div>
+  <h1 class="head">Every new machine adds cost on the legacy stack, and renters find the failures first</h1>
+  <ul class="b">
+    <li>Telemetry from every machine (battery, fuel, GPS, hours) lands on an in-house platform: ingestion pipelines, streaming infrastructure, a message bus and serving replicas.</li>
+    <li>Each of those layers <strong>scales linearly with fleet size</strong>, and every new machine class adds another pipeline to build, run and monitor.</li>
+    <li>Insight stays buried in raw telemetry; yard managers and analysts cannot ask questions without an engineering queue.</li>
+    <li>Maintenance is <strong>reactive</strong>: the renter discovers the failed unit before the rental company does.</li>
+  </ul>
+  <p class="small" style="position:absolute; left:72px; bottom:16px; margin:0;">Qualitative pattern for an equipment-rental fleet on an in-place stack. Not a measured customer figure.</p>
+  <span class="pagenum">2</span>
+</section>
+
+<!-- 3. Cost problem -->
+<section class="slide">
+  <p class="eyebrow">The cost problem</p>
+  <div class="accent"></div>
+  <h1 class="head" style="margin-bottom:20px;">On an in-place stack, cost follows the fleet. On Databricks, it follows the data.</h1>
+  <div style="display:grid; grid-template-columns: 430px 1fr; gap:36px; align-items:start;">
+    <div>
+      <ul class="b" style="font-size:18px;">
+        <li>Per-device connection and pipeline costs grow with every machine.</li>
+        <li>Clusters are sized for peak fleet load and run 24/7.</li>
+        <li>Serving infrastructure is duplicated per application.</li>
+        <li>Ops headcount rises with each new equipment class.</li>
+      </ul>
+      <div class="callout" style="margin-top:14px; font-size:15px;">Databricks: ingest, process and serve run on <strong>serverless</strong> pipelines and Lakebase, so cost is driven by data volume, not device count.</div>
+    </div>
+    <div>
+      <svg viewBox="0 0 560 300" width="560" height="300" role="img" aria-label="Illustrative cost index versus fleet size">
+        <!-- gridlines -->
+        <g stroke="#e6e6e6" stroke-width="1">
+          <line x1="60" y1="212" x2="520" y2="212"/>
+          <line x1="60" y1="164" x2="520" y2="164"/>
+          <line x1="60" y1="116" x2="520" y2="116"/>
+          <line x1="60" y1="68" x2="520" y2="68"/>
+          <line x1="60" y1="20" x2="520" y2="20"/>
+        </g>
+        <!-- axes -->
+        <line x1="60" y1="260" x2="520" y2="260" stroke="#1c1c1c" stroke-width="1.5"/>
+        <line x1="60" y1="20" x2="60" y2="260" stroke="#1c1c1c" stroke-width="1.5"/>
+        <!-- y labels -->
+        <g font-family="Roboto, Arial, sans-serif" font-size="12" fill="#494949" text-anchor="end">
+          <text x="52" y="264">0</text>
+          <text x="52" y="216">2x</text>
+          <text x="52" y="168">4x</text>
+          <text x="52" y="120">6x</text>
+          <text x="52" y="72">8x</text>
+          <text x="52" y="24">10x</text>
+        </g>
+        <!-- x labels -->
+        <g font-family="Roboto, Arial, sans-serif" font-size="13" fill="#494949" text-anchor="middle">
+          <text x="60" y="280">1x</text>
+          <text x="162" y="280">3x</text>
+          <text x="520" y="280">10x</text>
+          <text x="290" y="300" font-size="13">Fleet size (multiple of today&rsquo;s fleet)</text>
+        </g>
+        <!-- legacy: linear -->
+        <polyline points="60,236 520,20" fill="none" stroke="#494949" stroke-width="4" stroke-dasharray="10 6"/>
+        <circle cx="520" cy="20" r="5" fill="#494949"/>
+        <!-- databricks: sub-linear (illustrative) -->
+        <polyline points="60,236 162,212 520,128" fill="none" stroke="#008545" stroke-width="4"/>
+        <circle cx="162" cy="212" r="5" fill="#008545"/>
+        <circle cx="520" cy="128" r="5" fill="#008545"/>
+        <!-- labels -->
+        <g font-family="Roboto, Arial, sans-serif" font-size="14" font-weight="700">
+          <text x="505" y="14" text-anchor="end" fill="#1c1c1c">Legacy in-place: ~10x</text>
+          <text x="505" y="152" text-anchor="end" fill="#008545">Databricks: ~5.5x</text>
+        </g>
+      </svg>
+      <p class="small" style="margin:4px 0 0;"><span class="tag illus">Illustrative model</span> Total platform cost index. Legacy cost per machine assumed flat, so total is linear. Databricks assumes 50% fixed per-run overhead and 50% volume-driven. Not customer actuals.</p>
+    </div>
+  </div>
+  <table style="margin-top:14px; font-size:15px;">
+    <tr><th style="width:24%"></th><th>Legacy in-place (illustrative)</th><th>Databricks (illustrative)</th></tr>
+    <tr><td><strong>Cost driver</strong></td><td>Device count, peak-sized clusters, headcount</td><td>Data volume and serverless compute per run</td></tr>
+    <tr><td><strong>Cost per machine / month</strong></td><td>Roughly flat, so total grows ~linearly</td><td>Falls as the fleet grows</td></tr>
+  </table>
+  <span class="pagenum">3</span>
+</section>
+
+<!-- 4. Measured proof point -->
+<section class="slide">
+  <p class="eyebrow">Measured proof point</p>
+  <div class="accent"></div>
+  <h1 class="head" style="margin-bottom:22px;">The demo runs 300 machines, every 5 minutes, for about $103 a day at list price</h1>
+  <table>
+    <tr>
+      <th>Component (Databricks job or pipeline)</th>
+      <th class="num">Runs (14 full days)</th>
+      <th class="num">Succeeded</th>
+      <th class="num">Avg run time</th>
+      <th class="num">List cost / day</th>
+    </tr>
+    <tr>
+      <td>Live telemetry ingest <span class="code">job 350422921403193</span></td>
+      <td class="num">4,034</td><td class="num">4,032</td><td class="num">0.6 min</td><td class="num">$20.20</td>
+    </tr>
+    <tr>
+      <td>Lakebase serving refresh <span class="code">job 882651434551167</span></td>
+      <td class="num">4,033</td><td class="num">4,032</td><td class="num">0.5 min</td><td class="num">$22.31</td>
+    </tr>
+    <tr>
+      <td>SDP refresh (bronze to silver to gold) <span class="code">job 1039479508136923</span></td>
+      <td class="num">4,032</td><td class="num">4,032</td><td class="num">2.6 min (p95 3.2)</td><td class="num">$60.97</td>
+    </tr>
+    <tr class="total">
+      <td>Total, three components</td><td class="num"></td><td class="num"></td><td class="num"></td><td class="num">$103.48</td>
+    </tr>
+  </table>
+  <div style="display:grid; grid-template-columns: 1fr 1fr; gap:22px; margin-top:22px;">
+    <div class="card green">
+      <span class="tag measured">Measured</span>
+      <p style="margin:8px 0 0; font-size:18px;"><strong>$10.49 per machine per month</strong> = $103.48/day &times; 30.4 days &divide; 300 machines (list price).</p>
+    </div>
+    <div class="card charcoal">
+      <span class="tag derived">Derived</span>
+      <p style="margin:8px 0 0; font-size:16px;">Two-job subtotal (ingest + serving refresh): $42.51/day. Excludes discounts, the Apps, SQL and Genie usage on the shared workspace, which cannot be isolated to this demo.</p>
+    </div>
+  </div>
+  <p class="source">Source: query on <strong>fevm-azure</strong>, 2026-10-30. <code>system.billing.usage</code> (usage_metadata.job_id; usage_metadata.dlt_pipeline_id = b02360cc-15d8-4342-bc81-60c8570c26b2) joined to <code>system.billing.list_prices</code> on sku and price window; runs from <code>system.lakeflow.job_run_timeline</code>. Window 2026-10-16 to 2026-10-29 (14 complete days). List prices before any negotiated discount.</p>
+  <span class="pagenum">4</span>
+</section>
+
+<!-- 5. 10x projection -->
+<section class="slide">
+  <p class="eyebrow">Scale projection</p>
+  <div class="accent"></div>
+  <h1 class="head" style="margin-bottom:22px;">At 10x the fleet: about $31k a month in the worst case, about $17k in the illustrative sub-linear model</h1>
+  <table>
+    <tr>
+      <th>Scenario</th>
+      <th class="num">Machines</th>
+      <th class="num">Monthly cost (list)</th>
+      <th class="num">Per machine / month</th>
+      <th>Basis</th>
+    </tr>
+    <tr>
+      <td>Demo, as measured</td><td class="num">300</td><td class="num">$3,146</td><td class="num">$10.49</td>
+      <td><span class="tag measured">Measured</span></td>
+    </tr>
+    <tr>
+      <td>10x fleet, cost scales linearly (worst case)</td><td class="num">3,000</td><td class="num">$31,456</td><td class="num">$10.49</td>
+      <td><span class="tag derived">Projection</span></td>
+    </tr>
+    <tr class="total">
+      <td>10x fleet, sub-linear (5.5x multiple)</td><td class="num">3,000</td><td class="num">$17,301</td><td class="num">$5.77</td>
+      <td><span class="tag illus">Illustrative model</span></td>
+    </tr>
+  </table>
+  <div class="callout warn" style="margin-top:22px;">
+    <strong>Assumptions (not measured at 3,000 machines):</strong>
+    Monthly = daily cost &times; 30.4. Worst case keeps the measured $/machine. Illustrative sub-linear case assumes 50% of cost is fixed per-run overhead (scheduling, start-up) and 50% scales with telemetry volume, giving 0.5 + 0.5 &times; 10 = 5.5x. Run times at 10x are not measured and need a pilot check against the 5-minute cadence. Excludes the Apps, Lakebase and GenAI costs and any legacy comparison, which depend on the customer&rsquo;s actual bill.
+  </div>
+  <span class="pagenum">5</span>
+</section>
+
+<!-- 6. Architecture -->
+<section class="slide">
+  <p class="eyebrow" style="position:absolute; left:72px; top:40px; margin:0;">Architecture</p>
+  <h1 class="head" style="position:absolute; left:72px; top:62px; margin:0; font-size:30px; max-width:1136px;">One governed platform carries the journey from telemetry to work order</h1>
+  <div class="archwrap">
+    <img src="architecture.png" alt="Architecture diagram: IoT data, Lakeflow SDP pipeline, serving, and human-in-the-loop action loop" />
+  </div>
+  <div class="stages">
+    <div class="stage"><div class="t">1 &middot; Lakeflow ingest</div><div class="d">Serverless ingest job every 5 min; SDP with DQ guardrails quarantines bad rows</div></div>
+    <div class="stage"><div class="t">2 &middot; Unity Catalog governance</div><div class="d">Catalog, HITL procedures, metric views and grants on one platform</div></div>
+    <div class="stage"><div class="t">3 &middot; Lakebase serving</div><div class="d">Continuous synced tables; the app reads operational data from Postgres</div></div>
+    <div class="stage"><div class="t">4 &middot; GenAI</div><div class="d">ai_classify triage flags units for review; Genie answers questions over gold</div></div>
+    <div class="stage"><div class="t">5 &middot; Fleet Copilot app</div><div class="d">Human-in-the-loop: AI or people propose, a human approves</div></div>
+  </div>
+  <span class="pagenum">6</span>
+</section>
+
+<!-- 7. Intelligence -->
+<section class="slide">
+  <p class="eyebrow">What makes it intelligent</p>
+  <div class="accent"></div>
+  <h1 class="head">AI finds and proposes. Governed data answers. A person decides.</h1>
+  <ul class="b">
+    <li><strong>Genie space over governed gold data</strong>: natural-language answers with certified answers and cited sources, so yard managers query without SQL.</li>
+    <li><strong>Work-order tool</strong> (<span class="code">create_work_order</span>): a Genie request can propose a work order, but it lands as pending approval, never as open.</li>
+    <li><strong>AI-functions triage</strong> (<span class="code">ai_classify</span>): flags equipment running below the fleet average for review.</li>
+    <li><strong>AI proposes; a human approves.</strong> The model never opens a work order on its own.</li>
+  </ul>
+  <div class="callout warn" style="margin-top:24px; font-size:15px;">Status: the ai_classify triage table is in progress. Confirm it is populated before the live demo.</div>
+  <span class="pagenum">7</span>
+</section>
+
+<!-- 8. HITL loop -->
+<section class="slide">
+  <p class="eyebrow">The human-in-the-loop loop</p>
+  <div class="accent"></div>
+  <h1 class="head">Every work order passes a human gate before anyone dispatches a truck</h1>
+  <div class="steps">
+    <div class="step"><div class="n">1 &middot; Propose</div><h2>AI or a person</h2><p>From a telemetry alert, a triage flag or a Genie question. Row lands as PENDING_APPROVAL; proposer is audited.</p></div>
+    <div class="step"><div class="n">2 &middot; Pending</div><h2>Waiting on a human</h2><p>Shown in the Copilot queue. The unit leaves the at-risk list while an active order exists, so no duplicate orders.</p></div>
+    <div class="step"><div class="n">3 &middot; Approve</div><h2>Only a human</h2><p>Approving flips the order to OPEN. The approver is audited; the AI cannot take this step.</p></div>
+    <div class="step"><div class="n">4 &middot; Dispatch</div><h2>Fix, then verify</h2><p>The fix is dispatched. Telemetry shows recovery, which closes the loop.</p></div>
+  </div>
+  <div class="callout" style="margin-top:28px; font-size:17px;"><strong>Demo beat:</strong> pick an at-risk unit on the map, ask Genie which units need service this week, propose a work order, approve it, and watch the status flip to OPEN.</div>
+  <span class="pagenum">8</span>
+</section>
+
+<!-- 9. Buyer KPIs -->
+<section class="slide">
+  <p class="eyebrow">Buyer KPIs</p>
+  <div class="accent"></div>
+  <h1 class="head" style="margin-bottom:20px;">What we measured on the demo, and what a pilot must prove</h1>
+  <div class="kpis">
+    <div class="kpi">
+      <span class="tag measured">Measured</span>
+      <div class="big">48.3%</div>
+      <div class="lbl">Fleet utilization, 7-day average</div>
+      <div class="src">gold_daily_agg, 2026-10-24 to 10-30, machine-weighted across 4 classes (synthetic demo fleet). Query on fevm-azure.</div>
+    </div>
+    <div class="kpi">
+      <span class="tag measured">Measured</span>
+      <div class="big">$10.49</div>
+      <div class="lbl">Cost per machine per month (list price)</div>
+      <div class="src">system.billing.usage x list_prices, 14 full days, 300 machines. See measured proof point.</div>
+    </div>
+    <div class="kpi">
+      <span class="tag derived">Derived</span>
+      <div class="big">&lt; 10 min</div>
+      <div class="lbl">Telemetry to app (time-to-insight)</div>
+      <div class="src">5-min cadence plus measured run times of 0.6, 0.5 and 2.6 min. Not timed end to end; confirm in pilot.</div>
+    </div>
+    <div class="kpi ill">
+      <span class="tag illus">Illustrative target</span>
+      <div class="big">&minus;10% target</div>
+      <div class="lbl">Machine downtime avoided</div>
+      <div class="src">Not measured. Set the baseline with the customer in the pilot; the number above is a placeholder.</div>
+    </div>
+  </div>
+  <p class="source">Utilization and cost come from query results on fevm-azure (2026-10-30). Fleet data is synthetic demo data, so these are demo values, not customer actuals.</p>
+  <span class="pagenum">9</span>
+</section>
+
+<!-- 10. Value framing -->
+<section class="slide">
+  <p class="eyebrow">Value framing</p>
+  <div class="accent"></div>
+  <h1 class="head" style="margin-bottom:24px;">For the executive sponsor: lower TCO. For the domain owner: less babysitting.</h1>
+  <div class="cols">
+    <div class="card yellow">
+      <h2>Executive sponsor</h2>
+      <ul class="b" style="font-size:18px;">
+        <li><strong>Lower TCO:</strong> one platform in place of separate ingest, streaming, serving and ops stacks (illustrative; confirm the customer&rsquo;s current stack count).</li>
+        <li><strong>Cost follows data volume</strong>, not device count or headcount.</li>
+        <li><strong>Governed from day one</strong> with Unity Catalog grants and audit.</li>
+      </ul>
+    </div>
+    <div class="card green">
+      <h2>Domain owner (fleet operations)</h2>
+      <ul class="b" style="font-size:18px;">
+        <li><strong>No pipeline babysitting:</strong> DQ guardrails quarantine bad rows with full accounting.</li>
+        <li><strong>Governed metrics:</strong> one definition of utilization, health and anomalies.</li>
+        <li><strong>Natural-language access</strong> for the yard team through Genie, with no SQL queue.</li>
+      </ul>
+    </div>
+  </div>
+  <span class="pagenum">10</span>
+</section>
+
+<!-- 11. Demo and next steps -->
+<section class="slide">
+  <p class="eyebrow">Demo and next steps</p>
+  <div class="accent"></div>
+  <h1 class="head" style="margin-bottom:24px;">Try it live, then start a 30-day pilot on your own fleet data</h1>
+  <div class="cols">
+    <div class="card charcoal">
+      <h2>Live demo, in this order</h2>
+      <ul class="b" style="font-size:18px;">
+        <li><strong>Fleet map:</strong> risk-colored markers; click an at-risk unit.</li>
+        <li><strong>Genie chat:</strong> ask a natural-language question and check the cited answer.</li>
+        <li><strong>Propose, then approve:</strong> create a work order, approve it, and watch it go OPEN.</li>
+      </ul>
+    </div>
+    <div class="card green">
+      <h2>30-day pilot (proposed)</h2>
+      <ul class="b" style="font-size:18px;">
+        <li><strong>Week 1:</strong> connect a telemetry sample; agree on KPIs and baselines.</li>
+        <li><strong>Week 2:</strong> ingest with DQ guardrails; governed metrics in Unity Catalog.</li>
+        <li><strong>Week 3:</strong> Copilot app and Genie for the yard team; propose and approve on real alerts.</li>
+        <li><strong>Week 4:</strong> measure utilization, downtime and cost per machine against baseline; decide on scale-out.</li>
+      </ul>
+    </div>
+  </div>
+  <span class="pagenum">11</span>
+</section>
+
+</body>
+</html>
