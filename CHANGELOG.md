@@ -13,6 +13,14 @@ file write/edit) against the current tree — see Fidelity notes.
   At-Risk Machines table now shows an AI Analysis column (tier + maintenance suggestion)
   and includes machines the AI flags below-average even when the rule-based score is 0
   (153 rows: 3 rule-based + 150 AI-only)
+- **Explicit GenAI construct layer** added under `genai/`: `fleet_agent.py` (prompt
+  constants + agent class retrieving governed fleet context and calling a Databricks
+  foundation model through the OpenAI-compatible chat-completions endpoint, traced
+  with MLflow to Unity Catalog `sbr_iot_demo.traces.fleet_agent_traces`) and
+  `capture_genie_sql.py` (Genie Conversation API capture); run outputs committed to
+  `evidence/fleet_agent_run.md` and `evidence/genie_sql_transcript.md` — the latter
+  shows Genie's generated SQL over the governed views for three live questions with
+  the returned rows
 - Triage upgraded to two GenAI calls per machine: `ai_classify` tiers the machine and
   `ai_gen` writes a maintenance `recommended_action` from the same telemetry comparison;
   column synced to Lakebase (auto schema evolution), shown in the app's AI Analysis
