@@ -4,22 +4,36 @@ Feature: `ai_classify`-based performance triage for the equipment-rental IoT fle
 Output table: `sbr_iot_demo.fleet.ai_triage` (NEW table; no existing table, view, job or pipeline was modified).
 Workspace: fevm-azure (`adb-7405615395376229.9.azuredatabricks.net`). Warehouse `d0163299fb00cd64` (validation queries only).
 
-## Execution
+## Run 2 — current notebook version (INSERT OVERWRITE), post Lakebase sync
+
+The notebook was changed from `CREATE OR REPLACE TABLE ... AS SELECT` to
+`CREATE TABLE IF NOT EXISTS` + `INSERT OVERWRITE` so the Delta table identity — and
+therefore its CDF feed and the Lakebase synced table — survive every run. This run
+proves the committed notebook version executes cleanly and keeps the sync intact.
 
 | Item | Value |
 |---|---|
 | Job name | `sbr_iot_demo_ai_triage` |
 | Job ID | `1062733724985487` |
-| Run ID | `666542468716283` |
+| Run ID | `470403615524291` |
 | Task | `ai_triage` (notebook_task, serverless `environment_version` 2) |
-| Notebook | `/Users/chris.chang@databricks.com/sbr_iot_demo/ai_triage` (workspace object_id 3770102546636434) |
-| Run start (UTC) | 2026-10-30 14:48:11 |
-| Run finish (UTC) | 2026-10-30 14:51:14 |
-| Duration | ~183 s |
+| Run start (UTC) | 2026-10-30 16:25 |
+| Run finish (UTC) | 2026-10-30 16:28 |
+| Duration | ~175 s |
 | Result | `TERMINATED` / `SUCCESS` |
-| `classified_at` written | 2026-10-30T14:48:39.748Z (all 300 rows, from `current_timestamp()`) |
+| `classified_at` written | 2026-10-30T16:28:30 (all 300 rows) |
+| Lakebase sync after run | `fleet.ai_triage` in Postgres: 300 rows, `MAX(classified_at)` = 16:28:30 — sync survived the overwrite unchanged |
 
-Run was triggered with `databricks jobs run-now 1062733724985487` (blocking) and monitored via `databricks jobs get-run 666542468716283`.
+Tier distribution this run (live telemetry, ai_classify is nondeterministic):
+
+| Tier | Machines |
+|---|---:|
+| BELOW_AVERAGE | 151 |
+| AT_AVERAGE | 69 |
+| ABOVE_AVERAGE | 79 |
+| NO_DATA | 1 (GEN-0042 — last telemetry 2026-10-22, outside the 7-day window) |
+
+## Run 1 — original notebook version (CREATE OR REPLACE), initial build
 
 ## Rows
 
