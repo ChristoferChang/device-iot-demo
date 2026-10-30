@@ -1,0 +1,13 @@
+equipment_id,equipment_class,running_ratio_7d,class_avg_running_ratio_7d,running_ratio_delta,fuel_anomalies_7d,fuel_anomalies_delta,min_battery_running_7d,min_battery_delta,engine_hours_latest,engine_hours_delta,battery_voltage,battery_delta,fault_codes,performance_tier
+GEN-0042,generator,,0.4983625,,,,,,,,8.0,-4.55,P0562,NO_DATA
+EXC-0007,excavator,0.536,0.4867375,0.049,1.0,0.99,12.25,0.0,352.0,57.6,13.25,0.59,none,BELOW_AVERAGE
+LFT-0031,aerial_lift,0.026,0.485025,-0.459,0.0,0.0,12.32,0.07,197.2,-91.9,12.22,-0.34,none,BELOW_AVERAGE
+CMP-0005,compressor,0.478,0.4972375,-0.019,0.0,0.0,12.25,0.0,702.1,396.5,12.44,-0.23,SVC_DUE,BELOW_AVERAGE
+EXC-0013,excavator,0.321,0.4867375,-0.166,0.0,-0.01,12.25,0.0,179.6,-114.8,13.12,0.46,none,BELOW_AVERAGE
+GEN-0027,generator,0.325,0.4983625,-0.173,0.0,0.0,12.25,0.0,182.2,-117.6,12.11,-0.44,none,BELOW_AVERAGE
+EXC-0020,excavator,0.33,0.4867375,-0.157,0.0,-0.01,12.26,0.01,186.9,-107.5,12.13,-0.53,none,BELOW_AVERAGE
+CMP-0004,compressor,0.537,0.4972375,0.04,0.0,0.0,12.25,0.0,364.8,59.2,13.76,1.09,none,AT_AVERAGE
+CMP-0009,compressor,0.541,0.4972375,0.044,0.0,0.0,12.25,0.0,332.2,26.6,13.66,0.99,none,AT_AVERAGE
+CMP-0065,compressor,0.575,0.4972375,0.078,0.0,0.0,12.25,0.0,414.8,109.2,12.14,-0.53,none,ABOVE_AVERAGE
+LFT-0030,aerial_lift,0.574,0.485025,0.089,0.0,0.0,12.25,0.0,397.5,108.4,12.93,0.37,none,ABOVE_AVERAGE
+EXC-0058,excavator,0.573,0.4867375,0.086,0.0,-0.01,12.25,0.0,405.1,110.7,12.68,0.02,none,ABOVE_AVERAGE
